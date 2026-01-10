@@ -3,12 +3,12 @@
 from uuid import UUID
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, AnyUrl
+from pydantic import BaseModel, Field
 from fastapi_users.schemas import (
     BaseUserCreate,
 )
 
-from api.v1.languages.schemas import (
+from api.v1.users.schemas import (
     LearningLanguageInline,
 )
 
@@ -24,13 +24,14 @@ class UserSettingsRead(BaseModel):
     Соответствует UserSettingsReadUpdateSerializer.
     Подставлены разумные типы — при необходимости скорректируй (например enum для access levels).
     """
-    interface_language: str
-    words_default_access_level: str
-    collections_default_access_level: str
-    collections_allow_comments: bool
-    words_allow_comments: bool
-    collections_allow_suggestions: bool
-    collections_allow_suggestions_notifications: bool
+
+    interface_language: Optional[str] = None
+    words_default_access_level: Optional[str] = None
+    collections_default_access_level: Optional[str] = None
+    collections_allow_comments: Optional[bool] = None
+    words_allow_comments: Optional[bool] = None
+    collections_allow_suggestions: Optional[bool] = None
+    collections_allow_suggestions_notifications: Optional[bool] = None
 
     model_config = {
         "from_attributes": True,
@@ -44,8 +45,8 @@ class UserMeRead(BaseModel):
     username: str
     first_name: Optional[str] = None
 
-    image: Optional[AnyUrl] = None
-    profile_header_image: Optional[AnyUrl] = None
+    profile_image_url: Optional[str] = None
+    profile_header_image_url: Optional[str] = None
     profile_description: Optional[str] = None
 
     is_teacher: bool = Field(False)
@@ -74,8 +75,8 @@ class UserMeUpdate(BaseModel):
     username: Optional[str] = None
     first_name: Optional[str] = None
 
-    image: Optional[AnyUrl] = None
-    profile_header_image: Optional[AnyUrl] = None
+    profile_image_url: Optional[str] = None
+    profile_header_image_url: Optional[str] = None
     profile_description: Optional[str] = None
 
     is_teacher: Optional[bool] = None
@@ -104,6 +105,7 @@ class UserSettingsUpdate(BaseModel):
     Соответствует UserSettingsReadUpdateSerializer.
     Подставлены разумные типы — при необходимости скорректируй (например enum для access levels).
     """
+
     interface_language: Optional[str] = None
     words_default_access_level: Optional[str] = None
     collections_default_access_level: Optional[str] = None

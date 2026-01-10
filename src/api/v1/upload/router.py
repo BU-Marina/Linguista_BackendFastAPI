@@ -29,7 +29,7 @@ async def upload_audio(file: UploadFile = File(...)):
         type=file.content_type,
         filename=file.filename,
         size=file.size or 0,
-        uploaded_at=datetime.now(timezone.utc)
+        uploaded_at=datetime.now(timezone.utc),
     )
 
 
@@ -52,7 +52,7 @@ async def upload_image(
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=400,
-            detail="Only image files are allowed: .jpg, .jpeg, .jfif, .png, .gif, .webp"
+            detail="Only image files are allowed: .jpg, .jpeg, .jfif, .png, .gif, .webp",
         )
 
     # Ensure directory exists
@@ -81,5 +81,5 @@ async def upload_image(
         type=file.content_type,
         filename=file.filename,
         size=file.size or 0,
-        uploaded_at=datetime.now(timezone.utc)
+        uploaded_at=datetime.now(timezone.utc),
     )

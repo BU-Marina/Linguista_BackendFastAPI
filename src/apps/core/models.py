@@ -20,22 +20,26 @@ from core.constants import CoreLengthLimits
 # Tag model
 # ---------------------------
 
+
 class Tag(Base):
     """Тег."""
+
     __tablename__ = "core_tag"
 
     # fields
     name = Column(String(CoreLengthLimits.TAG_MAX_LENGTH), nullable=False)
 
     # FK
-    author_id = Column(PG_UUID(as_uuid=True), ForeignKey("users_user.id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users_user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # Relationships
     author = relationship("User", backref="tags", lazy="selectin")
 
-    __table_args__ = (
-        Index("ix_core_tag_created_modified", "created", "modified"),
-    )
+    __table_args__ = (Index("ix_core_tag_created_modified", "created", "modified"),)
 
     def __repr__(self):
         return f"<Tag(name={self.name}, author_id={self.author_id})>"
@@ -44,6 +48,7 @@ class Tag(Base):
 # ---------------------------
 # PlatformReview model
 # ---------------------------
+
 
 class PlatformReview(Base):
     """Отзыв на платформу."""
@@ -56,7 +61,11 @@ class PlatformReview(Base):
     is_shown = Column(Boolean, nullable=False, server_default="false")
 
     # FK
-    author_id = Column(PG_UUID(as_uuid=True), ForeignKey("users_user.id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users_user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # Relationships
     author = relationship("User", backref="platform_reviews", lazy="selectin")
@@ -68,4 +77,3 @@ class PlatformReview(Base):
 
     def __repr__(self):
         return f"<PlatformReview(id={self.id}, stars={self.stars})>"
-    

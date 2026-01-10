@@ -13,7 +13,6 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 from config.settings import settings
 
-# settings = Settings()
 
 naming_convention = {
     "ix": "ix_%(table_name)s_%(column_0_label)s",
@@ -24,6 +23,7 @@ naming_convention = {
 }
 
 metadata = MetaData(naming_convention=naming_convention)
+
 
 @lru_cache(maxsize=256)
 def _resolve_app_label(module_path: str) -> str | None:
@@ -79,7 +79,9 @@ class PreBase:
         return cls.__name__.lower()
 
     # UUID PK по умолчанию — можно переопределить в конкретной модели
-    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
+    id = Column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False
+    )
 
     # таймстампы по умолчанию
     created = Column(

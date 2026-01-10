@@ -1,0 +1,64 @@
+<!-- src/django_admin/templates/admin/i18n_change_form.html -->
+{% extends "admin/change_form.html" %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <style>
+    .i18n-tabs { margin: 0 0 12px 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+    .i18n-tabs li { list-style: none; }
+    .i18n-tabs button { padding: 6px 10px; border: 1px solid #ccc; background: #ffffff70; cursor: pointer; border-radius: 4px; }
+    .i18n-tabs button.active { font-weight: 600; border-color: transparent; background: #6babebae; }
+  </style>
+
+  <script>
+    // TODO: позже можно генерировать из settings, но пока захардкодим
+    const LANGS = ["ru", "en"];
+    const BASE_FIELDS = ["name", "country"];
+
+    function findRowForInput(inputEl) {
+      // В Django admin обычно есть .form-row вокруг поля
+      return inputEl.closest(".form-row") || inputEl.closest(".fieldBox") || inputEl.parentElement;
+    }
+
+    function setLang(lang) {
+      document.querySelectorAll("[data-i18n-tab]").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.i18nTab === lang);
+      });
+
+      LANGS.forEach(l => {
+        BASE_FIELDS.forEach(base => {
+          const fieldName = `${base}_${l}`;  // name_ru
+          const input = document.querySelector(`[name="${fieldName}"]`);
+          if (!input) return;
+          const row = findRowForInput(input);
+          if (!row) return;
+          row.style.display = (l === lang) ? "" : "none";
+        });
+      });
+
+      try { localStorage.setItem("admin_i18n_lang", lang); } catch(e) {}
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const saved = (function(){ try { return localStorage.getItem("admin_i18n_lang"); } catch(e) { return null; } })();
+      const initial = saved && LANGS.includes(saved) ? saved : "en";
+      setLang(initial);
+
+      document.querySelectorAll("[data-i18n-tab]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          setLang(btn.dataset.i18nTab);
+        });
+      });
+    });
+  </script>
+{% endblock %}
+
+{% block content %}
+  <ul class="i18n-tabs">
+    <li><button type="button" data-i18n-tab="ru">RU</button></li>
+    <li><button type="button" data-i18n-tab="en">EN</button></li>
+  </ul>
+
+  {{ block.super }}
+{% endblock %}

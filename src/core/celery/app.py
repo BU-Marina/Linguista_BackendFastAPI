@@ -3,7 +3,6 @@
 from celery import Celery
 from config.settings import settings
 
-# settings = Settings()
 
 celery_app = Celery(
     "core",

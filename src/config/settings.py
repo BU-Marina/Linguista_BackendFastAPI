@@ -2,13 +2,14 @@
 
 import os
 from pathlib import Path
+from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 
 class Settings(BaseSettings):
@@ -52,6 +53,10 @@ class Settings(BaseSettings):
 
     # DJANGO DEBUG VALUE
     DJANGO_DEBUG: bool
+
+    # LOCALIZATION
+    SUPPORTED_LANGS: List[str]
+    DEFAULT_LANG: str
 
 
 settings = Settings()

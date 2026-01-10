@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "replace-me")
 
@@ -23,12 +23,16 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
     # django-celery-beat & results
     "django_celery_beat",
     # "django_celery_results",
-
-    "users",
+    "sa_core",
+    "sa_users",
+    "sa_languages",
+    "sa_achievements",
+    "sa_chats",
+    "sa_notifications",
+    "sa_vocabulary",
 ]
 
 MIDDLEWARE = [
@@ -45,12 +49,16 @@ ROOT_URLCONF = "urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
-        "OPTIONS": {"context_processors": ["django.template.context_processors.debug",
-                                           "django.template.context_processors.request",
-                                           "django.contrib.auth.context_processors.auth",
-                                           "django.contrib.messages.context_processors.messages"]},
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ]
+        },
     },
 ]
 
@@ -61,9 +69,9 @@ if not raw_url:
 
 django_url = raw_url.replace("postgresql+asyncpg://", "postgresql://")
 
-DATABASES = {
-    "default": dj_database_url.parse(django_url)
-}
+DATABASES = {"default": dj_database_url.parse(django_url)}
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # static (for admin)
 STATIC_URL = "/static/"
@@ -78,3 +86,12 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 # optional: store celery results in DB
 # CELERY_RESULT_BACKEND = os.getenv("REDIS_URL", "redis://redis:6379/0")
 # DJANGO_CELERY_RESULTS = {"RESULT_EXTENDED": True}
+
+# языки, для которых реально есть колонки name_<lang>, country_<lang>, ...
+ADMIN_I18N_LANGUAGES = [
+    ("ru", "Русский"),
+    ("en", "English"),
+    # позже добавим: ("es", "Español"), ...
+]
+
+ADMIN_I18N_DEFAULT_LANGUAGE = "en"

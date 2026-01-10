@@ -27,6 +27,8 @@ from core.storage import get_storage
 from auth.setup import (
     current_user,
     get_user_manager,
+    auth_backend,
+    fastapi_users,
 )
 from auth.manager import pwd_context
 from apps.users.models import (
@@ -41,21 +43,43 @@ from apps.languages.models import (
     UserLearningLanguage,
 )
 from apps.auth.models import RefreshToken
+from apps.auth.sql import SQL_USER_PROFILE
 from utils.images import _coerce_url
 
 from .schemas import (
     UserMeRead,
     UserMeUpdate,
     DeleteAccountRequest,
+    UserMeReadScalar,
+    UserCreate,
 )
-from .sql import SQL_USER_PROFILE
 
-auth_router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@auth_router.get("/me", response_model=UserMeRead)
+# --- FastAPI Users ---
+
+router.include_router(
+    fastapi_users.get_auth_router(auth_backend),
+    prefix="/jwt",
+)
+router.include_router(
+    fastapi_users.get_register_router(UserMeReadScalar, UserCreate),
+)
+router.include_router(
+    fastapi_users.get_verify_router(UserMeReadScalar),
+)
+router.include_router(
+    fastapi_users.get_reset_password_router(),
+)
+
+
+# --- Custom Auth Endpoints ---
+
+
+@router.get("/me", response_model=UserMeRead)
 async def get_me(
-    current_user = Depends(current_user),
+    current_user=Depends(current_user),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Получить профиль пользователя."""
@@ -70,13 +94,15 @@ async def get_me(
     )
     row = result.first()
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     # row fields: map to dict keys used in schema
     data = dict(row._mapping)  # use row._mapping -> dict of column name -> value
 
     # settings_json is text 'null' or json; convert if necessary (asyncpg returns actual JSON)
-    if data.get("settings_json") is not None and data["settings_json"] == 'null':
+    if data.get("settings_json") is not None and data["settings_json"] == "null":
         data["settings"] = None
     else:
         data["settings"] = data.pop("settings_json")
@@ -90,8 +116,10 @@ async def get_me(
         "slug": data["slug"],
         "username": data["username"],
         "first_name": data["first_name"],
-        "image": data["image"],
-        "profile_header_image": data["profile_header_image"],
+        "profile_image_url": _coerce_url(data.get("profile_image_url") or None),
+        "profile_header_image_url": _coerce_url(
+            data.get("profile_header_image_url") or None
+        ),
         "profile_description": data["profile_description"],
         "is_teacher": data["is_teacher"],
         "teaching_goal": data["teaching_goal"],
@@ -104,12 +132,27 @@ async def get_me(
         "settings": data["settings"],
     }
 
+    # normalize learning/taught languages keys (support 'language' -> isocode)
+    def _normalize_ll(items):
+        normalized = []
+        for item in items or []:
+            if isinstance(item, dict):
+                iso = item.get("isocode") or item.get("language")
+                normalized.append({**item, "isocode": iso})
+            else:
+                normalized.append(item)
+        return normalized
+
+    out["learning_languages"] = _normalize_ll(out["learning_languages"])
+    out["taught_languages"] = _normalize_ll(out["taught_languages"])
+
     return UserMeRead(**out)
 
 
 MAX_NATIVE = getattr(AmountLimits.Languages, "MAX_NATIVE_LANGUAGES_AMOUNT", 3)
 
-@auth_router.patch("/me", response_model=UserMeRead)
+
+@router.patch("/me", response_model=UserMeRead)
 async def update_me(
     payload: UserMeUpdate,
     current_user: User = Depends(current_user),
@@ -130,15 +173,17 @@ async def update_me(
         .options(
             selectinload(User.interests),
             selectinload(User.cities),
-            selectinload(User.native_languages),     # адаптируй имя relationship
-            selectinload(User.learning_languages_detail),     # адаптируй имя relationship
+            selectinload(User.native_languages),  # адаптируй имя relationship
+            selectinload(User.learning_languages_detail),  # адаптируй имя relationship
             selectinload(User.settings),
         )
     )
     res = await db.execute(q)
     user = res.scalar_one_or_none()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     # --- scalar fields: обновляем только если ключ присутствует в payload_dict ---
     scalar_fields = [
@@ -151,10 +196,10 @@ async def update_me(
     for fld in scalar_fields:
         if fld in payload_dict:
             setattr(user, fld, payload_dict[fld])
-    
+
     image_fields = [
-        "image",
-        "profile_header_image",
+        "profile_image_url",
+        "profile_header_image_url",
     ]
     for fld in image_fields:
         if fld in payload_dict:
@@ -166,14 +211,20 @@ async def update_me(
         if uname is not None:
             uname = uname.strip()
             if uname:
-                exists_q = select(func.count()).select_from(User).where(
-                    func.lower(User.username) == func.lower(uname),
-                    User.id != user.id,
+                exists_q = (
+                    select(func.count())
+                    .select_from(User)
+                    .where(
+                        func.lower(User.username) == func.lower(uname),
+                        User.id != user.id,
+                    )
                 )
                 r = await db.execute(exists_q)
                 cnt = r.scalar_one()
                 if cnt and cnt > 0:
-                    raise HTTPException(status_code=400, detail="Username already in use")
+                    raise HTTPException(
+                        status_code=400, detail="Username already in use"
+                    )
                 user.username = uname
             else:
                 # если явно прислали пустую строку — политика: установить None (или raise)
@@ -221,34 +272,44 @@ async def update_me(
         codes = payload_dict["native_languages"] or []
         MAX_NATIVE = 3  # или берите из констант
         if len(codes) > MAX_NATIVE:
-            raise HTTPException(status_code=400, detail=f"Max native languages = {MAX_NATIVE}")
+            raise HTTPException(
+                status_code=400, detail=f"Max native languages = {MAX_NATIVE}"
+            )
         # удалить старые
-        await db.execute(delete(UserNativeLanguage).where(UserNativeLanguage.user_id == user.id))
+        await db.execute(
+            delete(UserNativeLanguage).where(UserNativeLanguage.user_id == user.id)
+        )
         if codes:
             lang_q = select(Language).where(Language.isocode.in_(codes))
             r = await db.execute(lang_q)
-            langs = {l.isocode: l for l in r.scalars().all()}
+            langs = {lang_obj.isocode: lang_obj for lang_obj in r.scalars().all()}
             for code in codes:
                 lang = langs.get(code)
                 if not lang:
-                    raise HTTPException(status_code=400, detail=f"Language {code} not found")
+                    raise HTTPException(
+                        status_code=400, detail=f"Language {code} not found"
+                    )
                 new_assoc = UserNativeLanguage(user_id=user.id, language_id=lang.id)
                 db.add(new_assoc)
 
     # --- learning_languages: replace set if key present ---
     if "learning_languages" in payload_dict:
         incoming = payload_dict["learning_languages"] or []
-        await db.execute(delete(UserLearningLanguage).where(UserLearningLanguage.user_id == user.id))
+        await db.execute(
+            delete(UserLearningLanguage).where(UserLearningLanguage.user_id == user.id)
+        )
         if incoming:
             codes = [item["language"] for item in incoming if item.get("language")]
             lang_q = select(Language).where(Language.isocode.in_(codes))
             r = await db.execute(lang_q)
-            langs = {l.isocode: l for l in r.scalars().all()}
+            langs = {lang_obj.isocode: lang_obj for lang_obj in r.scalars().all()}
             for item in incoming:
                 code = item.get("language")
                 lang = langs.get(code)
                 if not lang:
-                    raise HTTPException(status_code=400, detail=f"Language {code} not found")
+                    raise HTTPException(
+                        status_code=400, detail=f"Language {code} not found"
+                    )
                 new_ll = UserLearningLanguage(
                     user_id=user.id,
                     language_id=lang.id,
@@ -281,14 +342,14 @@ async def update_me(
     return await get_me(current_user=user, db=db)
 
 
-@auth_router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_me(
     payload: DeleteAccountRequest = Body(...),
     mode: str = Query("soft", regex="^(soft|hard)$"),
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_session),
-    user_manager = Depends(get_user_manager),
-    storage = Depends(get_storage),
+    user_manager=Depends(get_user_manager),
+    storage=Depends(get_storage),
 ):
     """
     Удаление собственного профиля.
@@ -299,11 +360,17 @@ async def delete_me(
     # --- Валидация: для hard delete требуется пароль ---
     if mode == "hard":
         if not payload.password:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password required for hard delete")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password required for hard delete",
+            )
 
         # проверяем пароль — используем hashed_password в модели
         if not current_user.hashed_password:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No password set; cannot verify")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No password set; cannot verify",
+            )
 
         try:
             valid = await user_manager.verify_password(payload.password, current_user)
@@ -311,7 +378,9 @@ async def delete_me(
             valid = False
 
         if not valid:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid password")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Invalid password"
+            )
 
     # --- Выполняем удаление/анонимизацию в транзакции ---
     # Используем nested transaction / savepoint если уже есть транзакция
@@ -332,17 +401,19 @@ async def delete_me(
 
         # Optional: удаляем/аннулируем refresh tokens, sessions etc.
         try:
-            await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
+            await db.execute(
+                delete(RefreshToken).where(RefreshToken.user_id == user.id)
+            )
         except NameError:
             # модель отсутствует — пропускаем
             pass
 
         # Удаление файлов
         try:
-            if user.image:
-                await storage.delete(user.image)
-            if user.profile_header_image:
-                await storage.delete(user.profile_header_image)
+            if user.profile_image_url:
+                await storage.delete(user.profile_image_url)
+            if user.profile_header_image_url:
+                await storage.delete(user.profile_header_image_url)
         except Exception:
             # логирование ошибки удаления файлов, но не прерываем транзакцию
             pass
@@ -356,7 +427,6 @@ async def delete_me(
             random_hash = pwd_context.hash(random_plain)
 
             # Обнуляем чувствительные поля (оставляем id, created и т.п.)
-            # Подгоните список полей под вашу модель
             stmt = (
                 update(User)
                 .where(User.id == user.id)
@@ -365,11 +435,12 @@ async def delete_me(
                     username=new_username,
                     first_name=None,
                     profile_description=None,
-                    image=None,
-                    profile_header_image=None,
+                    profile_image_url=None,
+                    profile_header_image_url=None,
                     hashed_password=random_hash,
                     is_active=False,
                     is_verified=False,
+                    is_deleted=True,
                     # TODO опционально: пометить время удаления в отдельном поле deleted_at = func.now()
                 )
             )
@@ -378,7 +449,7 @@ async def delete_me(
         else:  # hard
             # если у модели заданы каскадные FK (ON DELETE CASCADE) — db.delete(user) удалит связанные rows
             await db.delete(user)
-        
+
         await db.commit()
 
     # транзакция коммитится при выходе из контекста

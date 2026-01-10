@@ -1,0 +1,69 @@
+{% load i18n admin_urls static admin_modify %}
+<fieldset class="module aligned {{ fieldset.classes }}">
+  {% if fieldset.name %}<h2>{{ fieldset.name }}</h2>{% endif %}
+  {% if fieldset.description %}<div class="description">{{ fieldset.description|safe }}</div>{% endif %}
+
+  {% for line in fieldset %}
+    <div class="form-row{% if line.errors %} errors{% endif %}{% for field in line %}{% if field.field.name %} field-{{ field.field.name }}{% endif %}{% endfor %}"
+         {% comment %}
+         if the line contains any virtual i18n field like name__ru, add data attrs:
+         {% endcomment %}
+         {% for field in line %}
+           {% if "__" in field.field.name %}
+             {% with parts=field.field.name|cut:" " %}
+             {% endwith %}
+           {% endif %}
+         {% endfor %}>
+      {{ line.errors }}
+      {% for field in line %}
+        {% with fname=field.field.name %}
+          {% if "__" in fname %}
+            {% with base=fname|slice:":-3" %}
+            {% endwith %}
+          {% endif %}
+        {% endwith %}
+      {% endfor %}
+
+      {% for field in line %}
+        {% with fname=field.field.name %}
+          {% if "__" in fname %}
+            {% with base=fname|cut:" " %}
+            {% endwith %}
+          {% endif %}
+        {% endwith %}
+      {% endfor %}
+
+      {% for field in line %}
+        {% with fname=field.field.name %}
+          {% if "__" in fname %}
+            {% comment %}
+              Expected pattern: <base>__<lang>, e.g. name__ru
+            {% endcomment %}
+            {% with base=fname|cut:" " %}
+            {% endwith %}
+          {% endif %}
+        {% endwith %}
+      {% endfor %}
+
+      {% for field in line %}
+        {% with fname=field.field.name %}
+          {% if "__" in fname %}
+            {% with base=fname|slice:":-3" lang=fname|slice:"-2:" %}
+              <div data-i18n-field-row="1" data-i18n-field="{{ base }}" data-i18n-lang="{{ lang }}">
+                {{ field.label_tag }}
+                {{ field.field }}
+                {% if field.field.help_text %}<div class="help">{{ field.field.help_text|safe }}</div>{% endif %}
+                {{ field.errors }}
+              </div>
+            {% endwith %}
+          {% else %}
+            {{ field.label_tag }}
+            {{ field.field }}
+            {% if field.field.help_text %}<div class="help">{{ field.field.help_text|safe }}</div>{% endif %}
+            {{ field.errors }}
+          {% endif %}
+        {% endwith %}
+      {% endfor %}
+    </div>
+  {% endfor %}
+</fieldset>

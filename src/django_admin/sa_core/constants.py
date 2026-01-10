@@ -1,0 +1,3 @@
+"""..."""
+
+DEFAULT_MAX_SLUG_LENGTH = 1024

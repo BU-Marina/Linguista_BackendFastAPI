@@ -28,18 +28,16 @@ def make_mail_conf() -> ConnectionConfig:
 async def send_email_async(subject: str, recipients: list[str], body: str):
     conf = make_mail_conf()
     fm = FastMail(conf)
-    print('!!send email', recipients, body)
     message = MessageSchema(
-        subject=subject,
-        recipients=recipients,
-        body=body,
-        subtype="html"
+        subject=subject, recipients=recipients, body=body, subtype="html"
     )
+
     try:
         await asyncio.wait_for(fm.send_message(message), timeout=30)
-        print('.done')
+
     except Exception as e:
         import logging
+
         logging.exception(f"Failed to send verification email: {e}")
         raise
 
@@ -54,23 +52,19 @@ async def send_verification_email_async(
     subject = "Confirm your email"
     body = f"Hi {user_username or ''}, click to verify: {verify_url}"
 
-    print('??continue to send...')
-
     # отправка в фоне / асинхронно
     await send_email_async(subject, [user_mail], body)
 
 
 async def send_reset_password_email_async(
-        user_username,
-        user_mail,
-        token,
-        request=None,
-    ):
+    user_username,
+    user_mail,
+    token,
+    request=None,
+):
     reset_url = f"{settings.FRONTEND_RESET_URL}?token={token}"
     subject = "Reset account password"
     body = f"Hi {user_username or ''}, click to reset your password: {reset_url}"
-
-    print('??continue to send...')
 
     # отправка в фоне / асинхронно
     await send_email_async(subject, [user_mail], body)

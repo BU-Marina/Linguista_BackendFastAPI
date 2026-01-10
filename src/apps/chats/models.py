@@ -19,22 +19,52 @@ from .constants import ChatsLengthLimits, ChatTypesEnum
 chats_chat_tags = Table(
     "chats_chat_tags",
     Base.metadata,
-    Column("chat_id", PG_UUID(as_uuid=True), ForeignKey("chats_chat.id", ondelete="CASCADE"), primary_key=True),
-    Column("tag_id", PG_UUID(as_uuid=True), ForeignKey("core_tag.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "chat_id",
+        PG_UUID(as_uuid=True),
+        ForeignKey("chats_chat.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "tag_id",
+        PG_UUID(as_uuid=True),
+        ForeignKey("core_tag.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 chats_chat_languages_used = Table(
     "chats_chat_languages_used",
     Base.metadata,
-    Column("chat_id", PG_UUID(as_uuid=True), ForeignKey("chats_chat.id", ondelete="CASCADE"), primary_key=True),
-    Column("language_id", PG_UUID(as_uuid=True), ForeignKey("languages_language.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "chat_id",
+        PG_UUID(as_uuid=True),
+        ForeignKey("chats_chat.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "language_id",
+        PG_UUID(as_uuid=True),
+        ForeignKey("languages_language.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 chats_chat_blocked_users = Table(
     "chats_chat_blocked_users",
     Base.metadata,
-    Column("chat_id", PG_UUID(as_uuid=True), ForeignKey("chats_chat.id", ondelete="CASCADE"), primary_key=True),
-    Column("user_id", PG_UUID(as_uuid=True), ForeignKey("users_user.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "chat_id",
+        PG_UUID(as_uuid=True),
+        ForeignKey("chats_chat.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        PG_UUID(as_uuid=True),
+        ForeignKey("users_user.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 
@@ -43,20 +73,38 @@ class Chat(Base):
 
     # fields
     name = Column(String(ChatsLengthLimits.CHAT_NAME_MAX_LENGTH), nullable=True)
-    description = Column(String(ChatsLengthLimits.CHAT_DESCRIPTION_MAX_LENGTH), nullable=True)
-    chat_image = Column(String(1024), nullable=True)  # CompressImageField -> path
+    description = Column(
+        String(ChatsLengthLimits.CHAT_DESCRIPTION_MAX_LENGTH), nullable=True
+    )
+    chat_image_url = Column(String(1024), nullable=True)
     chat_type = Column(String(ChatTypesEnum.max_length), nullable=False)
 
     # FK
-    author_id = Column(PG_UUID(as_uuid=True), ForeignKey("users_user.id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users_user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # Relationships (FK)
     author = relationship("User", backref="chats_authored", lazy="selectin")
 
     # many-to-many relationships (tags, languages_used, blocked_users)
-    tags = relationship("Tag", secondary=chats_chat_tags, backref="chats", lazy="selectin")
-    languages_used = relationship("Language", secondary=chats_chat_languages_used, backref="chats", lazy="selectin")
-    blocked_users = relationship("User", secondary=chats_chat_blocked_users, backref="blocked_in_chats", lazy="selectin")
+    tags = relationship(
+        "Tag", secondary=chats_chat_tags, backref="chats", lazy="selectin"
+    )
+    languages_used = relationship(
+        "Language",
+        secondary=chats_chat_languages_used,
+        backref="chats",
+        lazy="selectin",
+    )
+    blocked_users = relationship(
+        "User",
+        secondary=chats_chat_blocked_users,
+        backref="blocked_in_chats",
+        lazy="selectin",
+    )
 
     # members via ChatMember (through model)
     members = relationship(
@@ -66,9 +114,7 @@ class Chat(Base):
         lazy="selectin",
     )
 
-    __table_args__ = (
-        Index("ix_chats_chat_created_modified", "created", "modified"),
-    )
+    __table_args__ = (Index("ix_chats_chat_created_modified", "created", "modified"),)
 
     def __repr__(self):
         return f"<Chat(id={self.id}, name={self.name})>"
@@ -80,8 +126,16 @@ class ChatMember(Base):
     # fields (none extra beyond booleans)
 
     # FK
-    chat_id = Column(PG_UUID(as_uuid=True), ForeignKey("chats_chat.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(PG_UUID(as_uuid=True), ForeignKey("users_user.id", ondelete="CASCADE"), nullable=False)
+    chat_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("chats_chat.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users_user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # fields
     allow_invite_members = Column(Boolean, nullable=False, server_default="false")
@@ -109,16 +163,22 @@ class Message(Base):
     is_pinned = Column(Boolean, nullable=False, server_default="false")
 
     # FK
-    chat_id = Column(PG_UUID(as_uuid=True), ForeignKey("chats_chat.id", ondelete="CASCADE"), nullable=False)
-    author_id = Column(PG_UUID(as_uuid=True), ForeignKey("users_user.id", ondelete="CASCADE"), nullable=False)
+    chat_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("chats_chat.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    author_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users_user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # Relationships (FK)
     chat = relationship("Chat", backref="messages", lazy="selectin")
     author = relationship("User", backref="messages", lazy="selectin")
 
-    __table_args__ = (
-        Index("ix_chats_message_created", "created"),
-    )
+    __table_args__ = (Index("ix_chats_message_created", "created"),)
 
     def __repr__(self):
         return f"<Message(id={self.id}, chat_id={self.chat_id})>"
@@ -128,18 +188,19 @@ class Attachment(Base):
     """Приложение."""
 
     # fields
-    image = Column(String(1024), nullable=True)  # CompressImageField -> path
-    file = Column(String(1024), nullable=True)
+    media_url = Column(String(1024), nullable=True)
 
     # FK
-    message_id = Column(PG_UUID(as_uuid=True), ForeignKey("chats_message.id", ondelete="CASCADE"), nullable=False)
+    message_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("chats_message.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # Relationships (FK)
     message = relationship("Message", backref="attachments", lazy="selectin")
 
-    __table_args__ = (
-        Index("ix_chats_attachment_created", "created"),
-    )
+    __table_args__ = (Index("ix_chats_attachment_created", "created"),)
 
     def __repr__(self):
         return f"<Attachment(id={self.id}, message_id={self.message_id})>"

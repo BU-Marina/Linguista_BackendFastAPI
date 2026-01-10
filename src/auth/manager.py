@@ -2,7 +2,6 @@
 
 import uuid
 import logging
-import asyncio
 from typing import Optional
 
 from fastapi_users import (
@@ -41,7 +40,9 @@ pwd_context = CryptContext(
 class CustomPasswordHelper(PasswordHelper):
     """Управление паролем."""
 
-    def verify_and_update(self, plain_password: str, hashed_password: str) -> tuple[bool, str | None]:
+    def verify_and_update(
+        self, plain_password: str, hashed_password: str
+    ) -> tuple[bool, str | None]:
         """
         Проверяет plain_password против user.hashed_password.
         При успехе — если хеш нуждается в апгрейде, пересоздаёт новый хеш и сохраняет user.
@@ -72,22 +73,26 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret: str
 
     verification_token_lifetime_seconds: int = 60 * 60 * 24  # 24 hours
-    reset_password_token_lifetime_seconds: int = 60 * 60      # 1 hour
+    reset_password_token_lifetime_seconds: int = 60 * 60  # 1 hour
 
     def __init__(self, user_db, password_helper):
         super().__init__(user_db, password_helper)
 
         # Если settings returns SecretStr:
         if isinstance(settings.VERIFICATION_TOKEN_SECRET, SecretStr):
-            self.verification_token_secret = settings.VERIFICATION_TOKEN_SECRET.get_secret_value()
+            self.verification_token_secret = (
+                settings.VERIFICATION_TOKEN_SECRET.get_secret_value()
+            )
         else:
             self.verification_token_secret = settings.VERIFICATION_TOKEN_SECRET
 
         if isinstance(settings.RESET_PASSWORD_TOKEN_SECRET, SecretStr):
-            self.reset_password_token_secret = settings.RESET_PASSWORD_TOKEN_SECRET.get_secret_value()
+            self.reset_password_token_secret = (
+                settings.RESET_PASSWORD_TOKEN_SECRET.get_secret_value()
+            )
         else:
             self.reset_password_token_secret = settings.RESET_PASSWORD_TOKEN_SECRET
-    
+
     async def authenticate(self, credentials) -> User | None:
         user = await super().authenticate(credentials)
 
@@ -103,19 +108,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             return pwd_context.verify(plain_password, user.hashed_password)
         except Exception:
             return False
-    
-    # async def reset_password(self, token, password, request = None):
-    #     token_hash = sha256_hex(token)
-    #     row = await db.execute(select(ResetToken).where(ResetToken.token_hash == token_hash, ResetToken.expires_at > func.now()))
-    #     rec = row.scalar_one_or_none()
-    #     if not rec:
-    #         raise HTTPException(400, "INVALID_OR_EXPIRED_TOKEN")
-    #     user = await db.get(User, rec.user_id)
-    #     user.hashed_password = pwd_context.hash(new_password)
-    #     # delete used token(s), revoke refresh tokens
-    #     await db.execute(delete(ResetToken).where(ResetToken.user_id == user.id))
-    #     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
-    #     await db.commit()
 
     async def on_after_register(self, user: User, request=None):
         """..."""
@@ -129,7 +121,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         """..."""
 
         await self.verify_callback(user, token, request)
-    
+
     async def on_after_forgot_password(self, user: User, token: str, request=None):
         """..."""
 
@@ -161,7 +153,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 await session.rollback()
                 raise
 
-    async def verify_callback(self, user: User, token: Optional[str] = None, request=None):
+    async def verify_callback(
+        self, user: User, token: Optional[str] = None, request=None
+    ):
         """
         Попытка использовать внутренний fastapi-users метод генерации verification token,
         если он есть. Иначе — fallback: создаём JWT с полем 'type': 'verify'.
@@ -190,7 +184,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 token,
             ],
         )
-    
 
     async def reset_password_callback(self, user: User, token: str, request=None):
         """
