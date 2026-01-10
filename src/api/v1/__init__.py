@@ -1,0 +1,13 @@
+from .auth import router as auth_router  # noqa: F401
+from .users import router as users_router  # noqa: F401
+from .languages import router as languages_router  # noqa: F401
+from .upload import router as upload_router  # noqa: F401
+from .vocabulary import router as vocabulary_router  # noqa: F401
+from .collections import router as collections_router  # noqa: F401
+from .translations import router as translations_router  # noqa: F401
+from .definitions import router as definitions_router  # noqa: F401
+from .usage_examples import router as usage_examples_router  # noqa: F401
+from .image_associations import router as image_associations_router  # noqa: F401
+from .published import router as published_router  # noqa: F401
+from .exercises import router as exercises_router  # noqa: F401
+from .notifications import router as notifications_router  # noqa: F401
