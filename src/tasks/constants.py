@@ -14,6 +14,7 @@ CLEAR_EMPTY_VOCAB_OBJECTS = 'vocabulary.clear_empty_objects'
 UPDATE_WORD_VIEWS = 'vocabulary.update_word_views'
 UPDATE_COLLECTION_VIEWS = 'vocabulary.update_collection_views'
 CLEAR_COLLECTION_SUBSCRIPTION_INFO = 'vocabulary.clear_collection_subscription_info'
+UPGRADE_ACTIVITY_STATUS = 'vocabulary.upgrade_activity_status'
 
 # exercises
 DELETE_PREVIOUS_EX_CONF = 'exercises.delete_previous_confs'

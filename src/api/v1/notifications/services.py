@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.utils.pagination import normalize_pagination
 from apps.notifications.constants import NotificationTypesEnum
+from api.v1.notifications.ws_helpers import group_notifications_if_needed
 
 from .models import NOTIFICATION_MODELS
 from .schemas import NotificationsPageOut, NotificationOut
@@ -23,6 +24,8 @@ async def notifications_list_service(
     limit: int,
 ) -> NotificationsPageOut:
     Notification = NOTIFICATION_MODELS['Notification']
+
+    await group_notifications_if_needed(session, user_id)
 
     page, limit, offset = normalize_pagination(page, limit)
     stmt = (
@@ -78,3 +81,23 @@ async def notification_delete_service(
     return await notifications_list_service(
         session=session, user_id=user_id, page=page, limit=limit
     )
+
+
+async def notification_mark_seen_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    notification_id: UUID,
+) -> None:
+    Notification = NOTIFICATION_MODELS['Notification']
+    obj = (
+        await session.execute(
+            select(Notification).where(
+                Notification.id == notification_id, Notification.recipient_id == user_id
+            )
+        )
+    ).scalar_one_or_none()
+    if not obj:
+        raise HTTPException(status_code=404, detail='Notification not found')
+    obj.is_seen = True
+    await session.commit()
