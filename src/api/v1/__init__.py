@@ -11,3 +11,4 @@ from .image_associations import router as image_associations_router  # noqa: F40
 from .published import router as published_router  # noqa: F401
 from .exercises import router as exercises_router  # noqa: F401
 from .notifications import router as notifications_router  # noqa: F401
+from .unsplash import router as unsplash_router  # noqa: F401
