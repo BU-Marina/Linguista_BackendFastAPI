@@ -1,5 +1,7 @@
 """Users api endpoints."""
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +16,8 @@ from .schemas import (
     SubscriptionToggleOut,
     UserReadOut,
 )
+from api.v1.vocabulary.schemas import PageOut as WordsPageOut
+from api.v1.collections.schemas import PageOut as CollectionsPageOut
 from .params import build_users_list_params
 from .services import (
     add_to_friends_service,
@@ -28,13 +32,15 @@ from .services import (
     teachers_list_service,
     users_list_service,
     users_retrieve_service,
+    user_profile_words_service,
+    user_profile_collections_service,
 )
 
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix='/users', tags=['users'])
 
 
-@router.get("", response_model=PageOut)
+@router.get('', response_model=PageOut)
 async def users_list(
     page: int = Query(1, ge=1),
     limit: int = Query(32, ge=1, le=1000),
@@ -67,13 +73,13 @@ async def users_list(
         interests_exclude=interests_exclude,
         cities=cities,
     )
-    request_user_id = getattr(request_user, "id", None)
+    request_user_id = getattr(request_user, 'id', None)
     return await users_list_service(
         session=session, request_user_id=request_user_id, params=params
     )
 
 
-@router.get("/subscriptions", response_model=PageOut)
+@router.get('/subscriptions', response_model=PageOut)
 async def users_subscriptions(
     page: int = Query(1, ge=1),
     limit: int = Query(32, ge=1, le=1000),
@@ -113,7 +119,7 @@ async def users_subscriptions(
     )
 
 
-@router.post("/{slug}/subscribe", response_model=SubscriptionToggleOut)
+@router.post('/{slug}/subscribe', response_model=SubscriptionToggleOut)
 async def subscribe_toggle(
     slug: str,
     session: AsyncSession = Depends(get_async_session),
@@ -126,7 +132,7 @@ async def subscribe_toggle(
     )
 
 
-@router.post("/{slug}/allow-notifications", response_model=EnableNotificationsOut)
+@router.post('/{slug}/allow-notifications', response_model=EnableNotificationsOut)
 async def enable_notifications(
     slug: str,
     session: AsyncSession = Depends(get_async_session),
@@ -140,7 +146,7 @@ async def enable_notifications(
     )
 
 
-@router.delete("/{slug}/allow-notifications", response_model=EnableNotificationsOut)
+@router.delete('/{slug}/allow-notifications', response_model=EnableNotificationsOut)
 async def disable_notifications(
     slug: str,
     session: AsyncSession = Depends(get_async_session),
@@ -154,7 +160,7 @@ async def disable_notifications(
     )
 
 
-@router.post("/{slug}/add-to-friends", response_model=FriendRequestSentOut)
+@router.post('/{slug}/add-to-friends', response_model=FriendRequestSentOut)
 async def add_to_friends(
     slug: str,
     session: AsyncSession = Depends(get_async_session),
@@ -167,7 +173,7 @@ async def add_to_friends(
     )
 
 
-@router.post("/{slug}/remove-from-friends", response_model=IsFriendOut)
+@router.post('/{slug}/remove-from-friends', response_model=IsFriendOut)
 async def remove_from_friends(
     slug: str,
     session: AsyncSession = Depends(get_async_session),
@@ -180,7 +186,41 @@ async def remove_from_friends(
     )
 
 
-@router.get("/friend-requests", response_model=PageOut)
+@router.get('/{user_id}/words', response_model=WordsPageOut)
+async def user_profile_words(
+    user_id: UUID,
+    page: int = Query(1, ge=1),
+    limit: int = Query(32, ge=1, le=100),
+    session: AsyncSession = Depends(get_async_session),
+    request_user=Depends(optional_current_user),
+):
+    return await user_profile_words_service(
+        session=session,
+        request_user_id=getattr(request_user, 'id', None),
+        target_user_id=user_id,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.get('/{user_id}/collections', response_model=CollectionsPageOut)
+async def user_profile_collections(
+    user_id: UUID,
+    page: int = Query(1, ge=1),
+    limit: int = Query(32, ge=1, le=100),
+    session: AsyncSession = Depends(get_async_session),
+    request_user=Depends(optional_current_user),
+):
+    return await user_profile_collections_service(
+        session=session,
+        request_user_id=getattr(request_user, 'id', None),
+        target_user_id=user_id,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.get('/friend-requests', response_model=PageOut)
 async def friend_requests(
     page: int = Query(1, ge=1),
     limit: int = Query(32, ge=1, le=1000),
@@ -220,7 +260,7 @@ async def friend_requests(
     )
 
 
-@router.post("/friend-requests/{username}", response_model=PageOut)
+@router.post('/friend-requests/{username}', response_model=PageOut)
 async def friend_request_accept(
     username: str,
     page: int = Query(1, ge=1),
@@ -263,7 +303,7 @@ async def friend_request_accept(
     )
 
 
-@router.delete("/friend-requests/{username}", response_model=PageOut)
+@router.delete('/friend-requests/{username}', response_model=PageOut)
 async def friend_request_reject(
     username: str,
     page: int = Query(1, ge=1),
@@ -306,7 +346,7 @@ async def friend_request_reject(
     )
 
 
-@router.get("/friends", response_model=PageOut)
+@router.get('/friends', response_model=PageOut)
 async def friends_list(
     page: int = Query(1, ge=1),
     limit: int = Query(32, ge=1, le=1000),
@@ -346,7 +386,7 @@ async def friends_list(
     )
 
 
-@router.get("/buddies", response_model=PageOut)
+@router.get('/buddies', response_model=PageOut)
 async def buddies_list(
     page: int = Query(1, ge=1),
     limit: int = Query(32, ge=1, le=1000),
@@ -386,7 +426,7 @@ async def buddies_list(
     )
 
 
-@router.get("/teachers", response_model=PageOut)
+@router.get('/teachers', response_model=PageOut)
 async def teachers_list(
     page: int = Query(1, ge=1),
     limit: int = Query(32, ge=1, le=1000),
@@ -426,13 +466,13 @@ async def teachers_list(
     )
 
 
-@router.get("/{slug}", response_model=UserReadOut)
+@router.get('/{slug}', response_model=UserReadOut)
 async def users_retrieve(
     slug: str,
     session: AsyncSession = Depends(get_async_session),
     request_user=Depends(optional_current_user),
 ):
-    request_user_id = getattr(request_user, "id", None)
+    request_user_id = getattr(request_user, 'id', None)
     return await users_retrieve_service(
         session=session, request_user_id=request_user_id, slug=slug
     )

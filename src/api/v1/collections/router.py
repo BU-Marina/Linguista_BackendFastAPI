@@ -1,13 +1,20 @@
 """Collections API."""
 
 from fastapi import APIRouter, Depends, Query, Body
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.db import get_async_session
 from auth.setup import current_user
 
 from api.v1.vocabulary.params import build_collections_list_params
-from .schemas import CollectionIn, CollectionReadOut, PageOut
+from .schemas import (
+    CollectionIn,
+    CollectionReadOut,
+    PageOut,
+    CollectionResolveOut,
+    CollectionSubscriptionDetailOut,
+)
 from .services import (
     collections_list_service,
     collection_create_service,
@@ -17,12 +24,18 @@ from .services import (
     collection_add_words_service,
     collection_remove_words_service,
     collection_favorite_toggle_service,
+    collection_resolve_slug_service,
+    collection_add_words_bulk_service,
+    collection_allow_comments_switch_service,
+    collection_allow_suggestions_switch_service,
+    collection_allow_suggestions_notifications_switch_service,
+    collection_subscription_detail_service,
 )
 
-router = APIRouter(prefix="/collections", tags=["collections"])
+router = APIRouter(prefix='/collections', tags=['collections'])
 
 
-@router.get("", response_model=PageOut)
+@router.get('', response_model=PageOut)
 async def collections_list(
     page: int = Query(1, ge=1),
     limit: int = Query(32, ge=1, le=500),
@@ -46,7 +59,7 @@ async def collections_list(
     )
 
 
-@router.post("", response_model=CollectionReadOut)
+@router.post('', response_model=CollectionReadOut)
 async def collection_create(
     payload: CollectionIn,
     session: AsyncSession = Depends(get_async_session),
@@ -57,71 +70,156 @@ async def collection_create(
     )
 
 
-@router.get("/{slug}", response_model=CollectionReadOut)
-async def collection_retrieve(
+@router.get('/slug/{slug}', response_model=CollectionResolveOut)
+async def collection_resolve_slug(
     slug: str,
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
-    return await collection_retrieve_service(
+    return await collection_resolve_slug_service(
         session=session, user_id=user.id, slug=slug
     )
 
 
-@router.patch("/{slug}", response_model=CollectionReadOut)
+@router.get('/{collection_id}', response_model=CollectionReadOut)
+async def collection_retrieve(
+    collection_id: UUID,
+    session: AsyncSession = Depends(get_async_session),
+    user=Depends(current_user),
+):
+    return await collection_retrieve_service(
+        session=session, user_id=user.id, collection_id=collection_id
+    )
+
+
+@router.patch('/{collection_id}', response_model=CollectionReadOut)
 async def collection_update(
-    slug: str,
+    collection_id: UUID,
     payload: CollectionIn,
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
     return await collection_update_service(
-        session=session, user_id=user.id, slug=slug, payload=payload
+        session=session, user_id=user.id, collection_id=collection_id, payload=payload
     )
 
 
-@router.delete("/{slug}", status_code=204)
+@router.delete('/{collection_id}', status_code=204)
 async def collection_delete(
-    slug: str,
+    collection_id: UUID,
     delete_words: bool = Query(False),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
     await collection_delete_service(
-        session=session, user_id=user.id, slug=slug, delete_words=delete_words
+        session=session,
+        user_id=user.id,
+        collection_id=collection_id,
+        delete_words=delete_words,
     )
 
 
-@router.post("/{slug}/add-words", response_model=CollectionReadOut)
+@router.post('/{collection_id}/add-words', response_model=CollectionReadOut)
 async def collection_add_words(
-    slug: str,
+    collection_id: UUID,
     word_slugs: list[str] = Body(..., embed=True),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
     return await collection_add_words_service(
-        session=session, user_id=user.id, slug=slug, word_slugs=word_slugs
+        session=session,
+        user_id=user.id,
+        collection_id=collection_id,
+        word_slugs=word_slugs,
     )
 
 
-@router.post("/{slug}/remove-words", response_model=CollectionReadOut)
+@router.post('/{collection_id}/remove-words', response_model=CollectionReadOut)
 async def collection_remove_words(
-    slug: str,
+    collection_id: UUID,
     word_slugs: list[str] = Body(..., embed=True),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
     return await collection_remove_words_service(
-        session=session, user_id=user.id, slug=slug, word_slugs=word_slugs
+        session=session,
+        user_id=user.id,
+        collection_id=collection_id,
+        word_slugs=word_slugs,
     )
 
 
-@router.post("/{slug}/favorite", response_model=CollectionReadOut)
+@router.post('/add-words-to-collections')
+async def collections_add_words_bulk(
+    collections: list[UUID] = Body(..., embed=True),
+    word_ids: list[UUID] = Body(..., embed=True),
+    session: AsyncSession = Depends(get_async_session),
+    user=Depends(current_user),
+):
+    return await collection_add_words_bulk_service(
+        session=session, user_id=user.id, collection_ids=collections, word_ids=word_ids
+    )
+
+
+@router.post('/{collection_id}/allow-comments-switch', response_model=CollectionReadOut)
+async def collection_allow_comments_switch(
+    collection_id: UUID,
+    session: AsyncSession = Depends(get_async_session),
+    user=Depends(current_user),
+):
+    return await collection_allow_comments_switch_service(
+        session=session, user_id=user.id, collection_id=collection_id
+    )
+
+
+@router.post(
+    '/{collection_id}/allow-suggestions-switch', response_model=CollectionReadOut
+)
+async def collection_allow_suggestions_switch(
+    collection_id: UUID,
+    session: AsyncSession = Depends(get_async_session),
+    user=Depends(current_user),
+):
+    return await collection_allow_suggestions_switch_service(
+        session=session, user_id=user.id, collection_id=collection_id
+    )
+
+
+@router.post(
+    '/{collection_id}/allow-suggestions-notifications-switch',
+    response_model=CollectionReadOut,
+)
+async def collection_allow_suggestions_notifications_switch(
+    collection_id: UUID,
+    session: AsyncSession = Depends(get_async_session),
+    user=Depends(current_user),
+):
+    return await collection_allow_suggestions_notifications_switch_service(
+        session=session, user_id=user.id, collection_id=collection_id
+    )
+
+
+@router.get(
+    '/{collection_id}/subscription',
+    response_model=CollectionSubscriptionDetailOut,
+    responses={404: {'description': 'Subscription not found'}},
+)
+async def collection_subscription_detail(
+    collection_id: UUID,
+    session: AsyncSession = Depends(get_async_session),
+    user=Depends(current_user),
+):
+    return await collection_subscription_detail_service(
+        session=session, user_id=user.id, collection_id=collection_id
+    )
+
+
+@router.post('/{collection_id}/favorite', response_model=CollectionReadOut)
 async def collection_favorite_toggle(
-    slug: str,
+    collection_id: UUID,
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
     return await collection_favorite_toggle_service(
-        session=session, user_id=user.id, slug=slug
+        session=session, user_id=user.id, collection_id=collection_id
     )

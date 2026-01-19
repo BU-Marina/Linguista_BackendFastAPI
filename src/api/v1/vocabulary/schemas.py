@@ -18,15 +18,23 @@ class TagOut(BaseModel):
     id: UUID
     name: str
 
-    model_config = {"from_attributes": True}
+    model_config = {'from_attributes': True}
 
 
 class TypeOut(BaseModel):
     id: UUID
+    name: Optional[str] = None
     name_en: str
     name_ru: str
 
-    model_config = {"from_attributes": True}
+    model_config = {'from_attributes': True}
+
+
+class TranslationShortOut(BaseModel):
+    """Minimal translation info for word lists."""
+
+    text: str
+    language: Optional[str] = None
 
 
 class WordListOut(BaseModel):
@@ -35,6 +43,7 @@ class WordListOut(BaseModel):
     text: str
     language: Optional[str] = None
     translations_count: int = 0
+    translations: List[TranslationShortOut] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
     types: List[str] = Field(default_factory=list)
     favorite: bool = False
@@ -58,9 +67,9 @@ class WordIn(BaseModel):
     definitions: List[DefinitionIn] = Field(default_factory=list)
     examples: List[ExampleIn] = Field(default_factory=list)
     images: List[ImageIn] = Field(default_factory=list)
-    synonyms: List["RelationWordIn"] = Field(default_factory=list)
-    antonyms: List["RelationWordIn"] = Field(default_factory=list)
-    similars: List["RelationWordIn"] = Field(default_factory=list)
+    synonyms: List['RelationWordIn'] = Field(default_factory=list)
+    antonyms: List['RelationWordIn'] = Field(default_factory=list)
+    similars: List['RelationWordIn'] = Field(default_factory=list)
 
 
 class WordReadOut(WordListOut):
@@ -70,6 +79,12 @@ class WordReadOut(WordListOut):
     examples: List[ExampleOut] = Field(default_factory=list)
     definitions: List[DefinitionOut] = Field(default_factory=list)
     images: List[ImageOut] = Field(default_factory=list)
+    # frontend expects image_associations, keep both for compatibility
+    image_associations: List[ImageOut] = Field(default_factory=list)
+    read_access_level: Optional[str] = None
+    add_access_level: Optional[str] = None
+    allow_access_change: bool = True
+    allow_comments: bool = True
 
 
 class RelationWordIn(BaseModel):
@@ -99,16 +114,64 @@ class RelationWordIn(BaseModel):
         if self.is_reference():
             return
         if not self.text:
-            raise ValueError("text is required for new related word")
+            raise ValueError('text is required for new related word')
         if not (self.language or default_language):
-            raise ValueError("language is required for new related word")
+            raise ValueError('language is required for new related word')
 
 
 class PageOut(BaseModel):
     page: int
     limit: int
     count: int
+    next: str | None = None
+    previous: str | None = None
     results: list
+
+
+class WordResolveOut(BaseModel):
+    id: UUID
+    slug: str
+
+
+class WordCollectionsIn(BaseModel):
+    collections: List[UUID]
+
+
+class WordsIdsIn(BaseModel):
+    words: List[UUID]
+
+
+class WordAccessLevelUpdateIn(BaseModel):
+    id: UUID
+    read_access_level: Optional[str] = None
+    add_access_level: Optional[str] = None
+    allow_access_change: Optional[bool] = None
+
+
+class SynonymListFromWordOut(BaseModel):
+    id: UUID
+    to_word: str
+    from_word: WordReadOut
+    note: Optional[str] = None
+    created: Optional[datetime] = None
+    modified: Optional[datetime] = None
+
+
+class OtherSynonymsListOut(BaseModel):
+    translation_id: Optional[UUID] = None
+    translation_language: Optional[str] = None
+    word: Optional[str] = None
+    synonyms: List[SynonymListFromWordOut] = Field(default_factory=list)
+
+
+class SynonymReadOut(BaseModel):
+    id: UUID
+    to_word: WordReadOut
+    from_word: WordReadOut
+    other_synonyms: dict[str, OtherSynonymsListOut] = Field(default_factory=dict)
+    note: Optional[str] = None
+    created: Optional[datetime] = None
+    modified: Optional[datetime] = None
 
 
 class MultipleWordsIn(BaseModel):

@@ -45,6 +45,9 @@ from apps.languages.models import (
 from apps.auth.models import RefreshToken
 from apps.auth.sql import SQL_USER_PROFILE
 from utils.images import _coerce_url
+from core.utils.urls import get_full_media_url
+
+from pydantic import BaseModel
 
 from .schemas import (
     UserMeRead,
@@ -54,14 +57,14 @@ from .schemas import (
     UserCreate,
 )
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix='/auth', tags=['auth'])
 
 
 # --- FastAPI Users ---
 
 router.include_router(
     fastapi_users.get_auth_router(auth_backend),
-    prefix="/jwt",
+    prefix='/jwt',
 )
 router.include_router(
     fastapi_users.get_register_router(UserMeReadScalar, UserCreate),
@@ -69,15 +72,67 @@ router.include_router(
 router.include_router(
     fastapi_users.get_verify_router(UserMeReadScalar),
 )
-router.include_router(
-    fastapi_users.get_reset_password_router(),
-)
+
+# Custom reset-password endpoint that returns email
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+class ResetPasswordResponse(BaseModel):
+    email: str
+
+
+@router.post('/reset-password', response_model=ResetPasswordResponse)
+async def reset_password(
+    body: ResetPasswordRequest,
+    user_manager=Depends(get_user_manager),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Reset password and return user email for auto-login."""
+    try:
+        user = await user_manager.reset_password(body.token, body.password)
+
+        # User proved they own the email by clicking the reset link,
+        # so mark them as verified to allow login
+        if not user.is_verified:
+            await db.execute(
+                update(User).where(User.id == user.id).values(is_verified=True)
+            )
+            await db.commit()
+
+        return ResetPasswordResponse(email=user.email)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                'code': 'RESET_PASSWORD_BAD_TOKEN',
+                'reason': 'Bad token or user not exists.',
+            },
+        )
+
+
+@router.post('/forgot-password', status_code=status.HTTP_202_ACCEPTED)
+async def forgot_password(
+    email: str = Body(..., embed=True),
+    user_manager=Depends(get_user_manager),
+):
+    """Request password reset email."""
+    try:
+        user = await user_manager.get_by_email(email)
+        await user_manager.forgot_password(user)
+    except Exception:
+        # Don't reveal if user exists
+        pass
+    return None
 
 
 # --- Custom Auth Endpoints ---
 
 
-@router.get("/me", response_model=UserMeRead)
+@router.get('/me', response_model=UserMeRead)
 async def get_me(
     current_user=Depends(current_user),
     db: AsyncSession = Depends(get_async_session),
@@ -90,46 +145,46 @@ async def get_me(
 
     result = await db.execute(
         text(SQL_USER_PROFILE),
-        {"user_id": user_id, "request_user_id": req_user_id},
+        {'user_id': user_id, 'request_user_id': req_user_id},
     )
     row = result.first()
     if not row:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail='User not found'
         )
 
     # row fields: map to dict keys used in schema
     data = dict(row._mapping)  # use row._mapping -> dict of column name -> value
 
     # settings_json is text 'null' or json; convert if necessary (asyncpg returns actual JSON)
-    if data.get("settings_json") is not None and data["settings_json"] == "null":
-        data["settings"] = None
+    if data.get('settings_json') is not None and data['settings_json'] == 'null':
+        data['settings'] = None
     else:
-        data["settings"] = data.pop("settings_json")
+        data['settings'] = data.pop('settings_json')
 
     # ensure Python types: json_agg returned as list, exists -> bool, counts -> int
     # If interests/cities/native_languages are JSON strings, ensure they are Python lists (asyncpg already does)
     # Now construct Pydantic model
     # Map DB key names to Pydantic keys if they differ:
     out = {
-        "id": data["id"],
-        "slug": data["slug"],
-        "username": data["username"],
-        "first_name": data["first_name"],
-        "profile_image_url": _coerce_url(data.get("profile_image_url") or None),
-        "profile_header_image_url": _coerce_url(
-            data.get("profile_header_image_url") or None
+        'id': data['id'],
+        'slug': data['slug'],
+        'username': data['username'],
+        'first_name': data['first_name'],
+        'profile_image_url': get_full_media_url(data.get('profile_image_url')),
+        'profile_header_image_url': get_full_media_url(
+            data.get('profile_header_image_url')
         ),
-        "profile_description": data["profile_description"],
-        "is_teacher": data["is_teacher"],
-        "teaching_goal": data["teaching_goal"],
-        "interests": data["interests"] or [],
-        "cities": data["cities"] or [],
-        "native_languages": data["native_languages"] or [],
-        "learning_languages": data["learning_languages"] or [],
-        "taught_languages": data["taught_languages"] or [],
-        "onboarding_passed": data["onboarding_passed"],
-        "settings": data["settings"],
+        'profile_description': data['profile_description'],
+        'is_teacher': data['is_teacher'],
+        'teaching_goal': data['teaching_goal'],
+        'interests': data['interests'] or [],
+        'cities': data['cities'] or [],
+        'native_languages': data['native_languages'] or [],
+        'learning_languages': data['learning_languages'] or [],
+        'taught_languages': data['taught_languages'] or [],
+        'onboarding_passed': data['onboarding_passed'],
+        'settings': data['settings'],
     }
 
     # normalize learning/taught languages keys (support 'language' -> isocode)
@@ -137,22 +192,22 @@ async def get_me(
         normalized = []
         for item in items or []:
             if isinstance(item, dict):
-                iso = item.get("isocode") or item.get("language")
-                normalized.append({**item, "isocode": iso})
+                iso = item.get('isocode') or item.get('language')
+                normalized.append({**item, 'isocode': iso})
             else:
                 normalized.append(item)
         return normalized
 
-    out["learning_languages"] = _normalize_ll(out["learning_languages"])
-    out["taught_languages"] = _normalize_ll(out["taught_languages"])
+    out['learning_languages'] = _normalize_ll(out['learning_languages'])
+    out['taught_languages'] = _normalize_ll(out['taught_languages'])
 
     return UserMeRead(**out)
 
 
-MAX_NATIVE = getattr(AmountLimits.Languages, "MAX_NATIVE_LANGUAGES_AMOUNT", 3)
+MAX_NATIVE = getattr(AmountLimits.Languages, 'MAX_NATIVE_LANGUAGES_AMOUNT', 3)
 
 
-@router.patch("/me", response_model=UserMeRead)
+@router.patch('/me', response_model=UserMeRead)
 async def update_me(
     payload: UserMeUpdate,
     current_user: User = Depends(current_user),
@@ -182,32 +237,32 @@ async def update_me(
     user = res.scalar_one_or_none()
     if user is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail='User not found'
         )
 
     # --- scalar fields: обновляем только если ключ присутствует в payload_dict ---
     scalar_fields = [
-        "username",
-        "first_name",
-        "profile_description",
-        "is_teacher",
-        "teaching_goal",
+        'username',
+        'first_name',
+        'profile_description',
+        'is_teacher',
+        'teaching_goal',
     ]
     for fld in scalar_fields:
         if fld in payload_dict:
             setattr(user, fld, payload_dict[fld])
 
     image_fields = [
-        "profile_image_url",
-        "profile_header_image_url",
+        'profile_image_url',
+        'profile_header_image_url',
     ]
     for fld in image_fields:
         if fld in payload_dict:
             setattr(user, fld, _coerce_url(payload_dict[fld]))
 
     # --- username: уникальность (только если поле пришло) ---
-    if "username" in payload_dict:
-        uname = payload_dict["username"]
+    if 'username' in payload_dict:
+        uname = payload_dict['username']
         if uname is not None:
             uname = uname.strip()
             if uname:
@@ -223,7 +278,7 @@ async def update_me(
                 cnt = r.scalar_one()
                 if cnt and cnt > 0:
                     raise HTTPException(
-                        status_code=400, detail="Username already in use"
+                        status_code=400, detail='Username already in use'
                     )
                 user.username = uname
             else:
@@ -234,8 +289,8 @@ async def update_me(
             user.username = None
 
     # --- interests (many-to-many by name): если ключ передан — заменить полностью ---
-    if "interests" in payload_dict:
-        incoming = payload_dict["interests"] or []  # [] означает очистку
+    if 'interests' in payload_dict:
+        incoming = payload_dict['interests'] or []  # [] означает очистку
         if incoming:
             interests_q = select(Interest).where(Interest.name.in_(incoming))
             r = await db.execute(interests_q)
@@ -251,8 +306,8 @@ async def update_me(
             user.interests = []
 
     # --- cities (many-to-many by name) аналогично ---
-    if "cities" in payload_dict:
-        incoming = payload_dict["cities"] or []
+    if 'cities' in payload_dict:
+        incoming = payload_dict['cities'] or []
         if incoming:
             cities_q = select(City).where(City.name.in_(incoming))
             r = await db.execute(cities_q)
@@ -268,12 +323,12 @@ async def update_me(
             user.cities = []
 
     # --- native_languages: replace (if key present) ---
-    if "native_languages" in payload_dict:
-        codes = payload_dict["native_languages"] or []
+    if 'native_languages' in payload_dict:
+        codes = payload_dict['native_languages'] or []
         MAX_NATIVE = 3  # или берите из констант
         if len(codes) > MAX_NATIVE:
             raise HTTPException(
-                status_code=400, detail=f"Max native languages = {MAX_NATIVE}"
+                status_code=400, detail=f'Max native languages = {MAX_NATIVE}'
             )
         # удалить старые
         await db.execute(
@@ -287,47 +342,47 @@ async def update_me(
                 lang = langs.get(code)
                 if not lang:
                     raise HTTPException(
-                        status_code=400, detail=f"Language {code} not found"
+                        status_code=400, detail=f'Language {code} not found'
                     )
                 new_assoc = UserNativeLanguage(user_id=user.id, language_id=lang.id)
                 db.add(new_assoc)
 
     # --- learning_languages: replace set if key present ---
-    if "learning_languages" in payload_dict:
-        incoming = payload_dict["learning_languages"] or []
+    if 'learning_languages' in payload_dict:
+        incoming = payload_dict['learning_languages'] or []
         await db.execute(
             delete(UserLearningLanguage).where(UserLearningLanguage.user_id == user.id)
         )
         if incoming:
-            codes = [item["language"] for item in incoming if item.get("language")]
+            codes = [item['language'] for item in incoming if item.get('language')]
             lang_q = select(Language).where(Language.isocode.in_(codes))
             r = await db.execute(lang_q)
             langs = {lang_obj.isocode: lang_obj for lang_obj in r.scalars().all()}
             for item in incoming:
-                code = item.get("language")
+                code = item.get('language')
                 lang = langs.get(code)
                 if not lang:
                     raise HTTPException(
-                        status_code=400, detail=f"Language {code} not found"
+                        status_code=400, detail=f'Language {code} not found'
                     )
                 new_ll = UserLearningLanguage(
                     user_id=user.id,
                     language_id=lang.id,
-                    level=item.get("level"),
-                    is_confirmed=item.get("is_confirmed", False),
+                    level=item.get('level'),
+                    is_confirmed=item.get('is_confirmed', False),
                 )
                 db.add(new_ll)
 
     # --- settings: nested update/create if key present ---
-    if "settings" in payload_dict:
-        settings_val = payload_dict["settings"]
+    if 'settings' in payload_dict:
+        settings_val = payload_dict['settings']
         if settings_val is None:
             # политика: если явно прислали null — можно удалить или игнорировать
             # здесь оставим как игнор (можно реализовать удаление)
             pass
         else:
             # settings_val — dict с пришедшими полями
-            if getattr(user, "settings", None) is None:
+            if getattr(user, 'settings', None) is None:
                 new_settings = UserSettings(user_id=user.id, **settings_val)
                 db.add(new_settings)
                 user.settings = new_settings
@@ -342,10 +397,10 @@ async def update_me(
     return await get_me(current_user=user, db=db)
 
 
-@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete('/me', status_code=status.HTTP_204_NO_CONTENT)
 async def delete_me(
     payload: DeleteAccountRequest = Body(...),
-    mode: str = Query("soft", regex="^(soft|hard)$"),
+    mode: str = Query('soft', regex='^(soft|hard)$'),
     current_user: User = Depends(current_user),
     db: AsyncSession = Depends(get_async_session),
     user_manager=Depends(get_user_manager),
@@ -358,18 +413,18 @@ async def delete_me(
     """
 
     # --- Валидация: для hard delete требуется пароль ---
-    if mode == "hard":
+    if mode == 'hard':
         if not payload.password:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Password required for hard delete",
+                detail='Password required for hard delete',
             )
 
         # проверяем пароль — используем hashed_password в модели
         if not current_user.hashed_password:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No password set; cannot verify",
+                detail='No password set; cannot verify',
             )
 
         try:
@@ -379,7 +434,7 @@ async def delete_me(
 
         if not valid:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Invalid password"
+                status_code=status.HTTP_403_FORBIDDEN, detail='Invalid password'
             )
 
     # --- Выполняем удаление/анонимизацию в транзакции ---
@@ -418,11 +473,11 @@ async def delete_me(
             # логирование ошибки удаления файлов, но не прерываем транзакцию
             pass
 
-        if mode == "soft":
+        if mode == 'soft':
             # анонимизируем и деактивируем
-            anon_suffix = f"deleted-{uuid4().hex[:8]}"
-            new_email = f"deleted+{anon_suffix}@example.invalid"
-            new_username = f"deleted_{anon_suffix}"
+            anon_suffix = f'deleted-{uuid4().hex[:8]}'
+            new_email = f'deleted+{anon_suffix}@example.invalid'
+            new_username = f'deleted_{anon_suffix}'
             random_plain = secrets.token_urlsafe(32)
             random_hash = pwd_context.hash(random_plain)
 

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from core.utils.urls import get_full_media_url
 
 
 class LearningLanguageInline(BaseModel):
@@ -44,6 +45,11 @@ class UserListOut(BaseModel):
 
     learning_languages_overlap_percent: Optional[float] = None
     interests_overlap_percent: Optional[float] = None
+
+    @field_validator('profile_image_url', 'profile_header_image_url', mode='before')
+    @classmethod
+    def convert_image_urls_to_full(cls, v):
+        return get_full_media_url(v)
 
 
 class PageOut(BaseModel):
@@ -93,6 +99,11 @@ class UserReadOut(BaseModel):
     new_words: list[str] = Field(default_factory=list)
     updated_words: list[str] = Field(default_factory=list)
     new_collections: list[str] = Field(default_factory=list)
+
+    @field_validator('profile_image_url', 'profile_header_image_url', mode='before')
+    @classmethod
+    def convert_image_urls_to_full(cls, v):
+        return get_full_media_url(v)
 
 
 class SubscriptionToggleOut(BaseModel):

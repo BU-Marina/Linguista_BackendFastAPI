@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 
 pwd_context = CryptContext(
     schemes=[
-        "argon2",
-        "bcrypt",
-        "django_pbkdf2_sha256",
-        "pbkdf2_sha256",
+        'argon2',
+        'bcrypt',
+        'django_pbkdf2_sha256',
+        'pbkdf2_sha256',
     ],
-    deprecated="auto",  # позволит needs_update() вернуть True для устаревших схем
+    deprecated='auto',  # позволит needs_update() вернуть True для устаревших схем
 )
 
 
@@ -94,12 +94,26 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             self.reset_password_token_secret = settings.RESET_PASSWORD_TOKEN_SECRET
 
     async def authenticate(self, credentials) -> User | None:
+        # First get the user by email to check verification status
+        try:
+            user_by_email = await self.user_db.get_by_email(credentials.username)
+        except Exception:
+            user_by_email = None
+
+        # Call parent authenticate (checks password)
         user = await super().authenticate(credentials)
 
-        # запретить логин если email не подтверждён
-        if not getattr(user, "is_verified", False):
-            # вариант: вернуть None (стандартный ответ: Invalid credentials)
-            return None
+        # If credentials are valid but user is not verified, raise specific error
+        if user_by_email and not getattr(user_by_email, 'is_verified', False):
+            from fastapi import HTTPException, status
+
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    'code': 'LOGIN_USER_NOT_VERIFIED',
+                    'reason': 'Please confirm your email before logging in.',
+                },
+            )
 
         return user
 
@@ -132,7 +146,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         Хук, который вызывается после регистрации (fastapi-users).
         Создаёт UserSettings с дефолтными значениями.
         """
-        logger.debug("Creating default settings for user %s", user.id)
+        logger.debug('Creating default settings for user %s', user.id)
 
         # создаём новую сессию, потому что текущая сессия внутри user_db может быть в другом контексте
         async with AsyncSessionLocal() as session:
@@ -145,7 +159,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             except IntegrityError:
                 # если уникальность нарушена (кто-то успел создать settings) — ничего не делаем
                 # можно логировать debug
-                logger.debug("UserSettings already exists for user %s", user.id)
+                logger.debug('UserSettings already exists for user %s', user.id)
                 await session.rollback()
 
             except Exception:
@@ -165,9 +179,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # ручная генерация JWT
         if not token:
             payload = {
-                "sub": str(user.id),
-                "email": user.email,
-                "aud": self.verification_token_audience,
+                'sub': str(user.id),
+                'email': user.email,
+                'aud': self.verification_token_audience,
             }
             token = generate_jwt(
                 payload,

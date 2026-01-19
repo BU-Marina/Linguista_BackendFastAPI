@@ -52,11 +52,11 @@ class SaPublicAccessModel(models.Model):
 
     read_access_level = models.CharField(
         max_length=8,  # AccessLevelsEnum.max_length
-        default="PUB",  # AccessLevelsEnum.PUBLIC
+        default='PUB',  # AccessLevelsEnum.PUBLIC
     )
     add_access_level = models.CharField(
         max_length=8,
-        default="PUB",
+        default='PUB',
     )
     allow_access_change = models.BooleanField(default=True)
 
@@ -73,4 +73,9 @@ class WordsCountMixin:
         Returns object related words amount.
         Related name of word objects must be `words`.
         """
-        return self.words.count()
+        # Prefer explicit words M2M, fallback to through relation for collections
+        if hasattr(self, 'words'):
+            return self.words.count()
+        if hasattr(self, 'words_in_collections'):
+            return self.words_in_collections.count()
+        return 0

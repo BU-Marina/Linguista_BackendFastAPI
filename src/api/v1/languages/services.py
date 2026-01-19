@@ -44,6 +44,7 @@ async def learning_languages_list_service(
     session: AsyncSession,
     user_id: UUID,
     params: LanguagesListParams,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LearningLanguagesListOut:
     base = build_learning_languages_base_stmt(
@@ -57,7 +58,7 @@ async def learning_languages_list_service(
         .mappings()
         .all()
     )
-    results = [map_learning_language_row(dict(r)) for r in rows]
+    results = [map_learning_language_row(dict(r), lang=lang) for r in rows]
     return LearningLanguagesListOut(count=total, results=results)
 
 
@@ -66,6 +67,7 @@ async def learning_language_detail_service(
     session: AsyncSession,
     user_id: UUID,
     isocode: str,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LearningLanguageOut:
     stmt = build_learning_languages_base_stmt(
@@ -76,8 +78,8 @@ async def learning_language_detail_service(
     )
     row = (await session.execute(stmt)).mappings().first()
     if not row:
-        raise HTTPException(status_code=404, detail="Learning language not found")
-    return map_learning_language_row(dict(row))
+        raise HTTPException(status_code=404, detail='Learning language not found')
+    return map_learning_language_row(dict(row), lang=lang)
 
 
 async def learning_languages_create_service(
@@ -86,15 +88,16 @@ async def learning_languages_create_service(
     user_id: UUID,
     payload: Iterable[LearningLanguageCreateIn],
     params: LanguagesListParams,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LearningLanguagesListOut:
-    Language = models["Language"]
-    UserLearningLanguage = models["UserLearningLanguage"]
-    LanguageCoverImage = models["LanguageCoverImage"]
+    Language = models['Language']
+    UserLearningLanguage = models['UserLearningLanguage']
+    LanguageCoverImage = models['LanguageCoverImage']
 
     requested_isocodes = {item.language_isocode for item in payload}
     if not requested_isocodes:
-        raise HTTPException(status_code=400, detail="No languages provided")
+        raise HTTPException(status_code=400, detail='No languages provided')
 
     languages = (
         (
@@ -116,7 +119,7 @@ async def learning_languages_create_service(
         if not lang.learning_available:
             raise HTTPException(
                 status_code=400,
-                detail=f"Language {lang.isocode} is not available for learning",
+                detail=f'Language {lang.isocode} is not available for learning',
             )
 
     current_count = (
@@ -148,7 +151,7 @@ async def learning_languages_create_service(
     ):
         raise HTTPException(
             status_code=409,
-            detail=f"Learning languages amount limit exceeded ({AmountLimits.Languages.MAX_LEARNING_LANGUAGES_AMOUNT})",
+            detail=f'Learning languages amount limit exceeded ({AmountLimits.Languages.MAX_LEARNING_LANGUAGES_AMOUNT})',
         )
     for lang in to_create:
         ull = UserLearningLanguage(user_id=user_id, language_id=lang.id)
@@ -171,12 +174,13 @@ async def learning_languages_create_service(
         await session.commit()
     except IntegrityError:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="Some languages are already added")
+        raise HTTPException(status_code=409, detail='Some languages are already added')
 
     return await learning_languages_list_service(
         session=session,
         user_id=user_id,
         params=params,
+        lang=lang,
         models=models,
     )
 
@@ -188,11 +192,12 @@ async def learning_language_delete_service(
     isocode: str,
     delete_words: bool,
     params: LanguagesListParams,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LearningLanguagesListOut:
-    Language = models["Language"]
-    UserLearningLanguage = models["UserLearningLanguage"]
-    Word = models["Word"]
+    Language = models['Language']
+    UserLearningLanguage = models['UserLearningLanguage']
+    Word = models['Word']
 
     ull_row = (
         await session.execute(
@@ -202,7 +207,7 @@ async def learning_language_delete_service(
         )
     ).first()
     if not ull_row:
-        raise HTTPException(status_code=404, detail="Learning language not found")
+        raise HTTPException(status_code=404, detail='Learning language not found')
 
     ull = ull_row[0]
     language = ull_row[1]
@@ -221,6 +226,7 @@ async def learning_language_delete_service(
         session=session,
         user_id=user_id,
         params=params,
+        lang=lang,
         models=models,
     )
 
@@ -244,11 +250,12 @@ async def all_languages_service(
     *,
     session: AsyncSession,
     user_id: UUID,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LanguagesListOut:
     stmt = build_all_languages_stmt(user_id=user_id, models=models)
     rows = (await session.execute(stmt)).mappings().all()
-    results = [map_language_row(dict(r)) for r in rows]
+    results = [map_language_row(dict(r), lang=lang) for r in rows]
     return LanguagesListOut(count=len(results), results=results)
 
 
@@ -256,6 +263,7 @@ async def native_languages_service(
     *,
     session: AsyncSession,
     user_id: UUID,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LanguagesListOut:
     stmt = build_native_languages_stmt(user_id=user_id, models=models)
@@ -263,15 +271,15 @@ async def native_languages_service(
     results = [
         map_language_row(
             {
-                "id": r["language_id"],
-                "isocode": r["isocode"],
-                "name_local": r["name_local"],
-                "name_en": r["name_en"],
-                "name_ru": r["name_ru"],
-                "flag_icon": r["flag_icon"],
-                "is_native": True,
-                "learning_available": True,
-                "interface_available": False,
+                'id': r['language_id'],
+                'isocode': r['isocode'],
+                'name_local': r['name_local'],
+                'name_en': r['name_en'],
+                'name_ru': r['name_ru'],
+                'flag_icon': r['flag_icon'],
+                'is_native': True,
+                'learning_available': True,
+                'interface_available': False,
             }
         )
         for r in rows
@@ -284,6 +292,7 @@ async def learning_available_service(
     session: AsyncSession,
     user_id: UUID | None,
     params: LanguagesListParams,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LanguagesListOut:
     stmt = build_learning_available_stmt(
@@ -310,6 +319,7 @@ async def cover_choices_service(
     user_id: UUID,
     isocode: str,
     params: LanguagesListParams,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> list[LanguageCoverOut]:
     stmt = build_cover_choices_stmt(user_id=user_id, isocode=isocode, models=models)
@@ -328,11 +338,12 @@ async def set_cover_service(
     isocode: str,
     cover_id: str | None,
     image_url: str | None,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LearningLanguageOut:
-    Language = models["Language"]
-    LanguageCoverImage = models["LanguageCoverImage"]
-    UserLearningLanguage = models["UserLearningLanguage"]
+    Language = models['Language']
+    LanguageCoverImage = models['LanguageCoverImage']
+    UserLearningLanguage = models['UserLearningLanguage']
 
     ull_row = (
         await session.execute(
@@ -342,7 +353,7 @@ async def set_cover_service(
         )
     ).first()
     if not ull_row:
-        raise HTTPException(status_code=404, detail="Learning language not found")
+        raise HTTPException(status_code=404, detail='Learning language not found')
     ull = ull_row[0]
     language = ull_row[1]
 
@@ -357,7 +368,7 @@ async def set_cover_service(
             )
         ).scalar_one_or_none()
         if not cover_obj_id:
-            raise HTTPException(status_code=404, detail="Cover image not found")
+            raise HTTPException(status_code=404, detail='Cover image not found')
     elif image_url:
         new_cover = LanguageCoverImage(
             language_id=language.id, image_url=image_url, default=False
@@ -366,7 +377,7 @@ async def set_cover_service(
         await session.flush()
         cover_obj_id = new_cover.id
     else:
-        raise HTTPException(status_code=400, detail="cover_id or image_url required")
+        raise HTTPException(status_code=400, detail='cover_id or image_url required')
 
     ull.cover_id = cover_obj_id
     await session.commit()
@@ -375,6 +386,7 @@ async def set_cover_service(
         session=session,
         user_id=user_id,
         isocode=isocode,
+        lang=lang,
         models=models,
     )
 
@@ -385,11 +397,12 @@ async def delete_cover_service(
     user_id: UUID,
     isocode: str,
     cover_id: str,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LearningLanguageOut:
-    Language = models["Language"]
-    LanguageCoverImage = models["LanguageCoverImage"]
-    UserLearningLanguage = models["UserLearningLanguage"]
+    Language = models['Language']
+    LanguageCoverImage = models['LanguageCoverImage']
+    UserLearningLanguage = models['UserLearningLanguage']
 
     ull_row = (
         await session.execute(
@@ -399,7 +412,7 @@ async def delete_cover_service(
         )
     ).first()
     if not ull_row:
-        raise HTTPException(status_code=404, detail="Learning language not found")
+        raise HTTPException(status_code=404, detail='Learning language not found')
     ull = ull_row[0]
     language = ull_row[1]
 
@@ -412,7 +425,7 @@ async def delete_cover_service(
         )
     ).scalar_one_or_none()
     if not cover_obj:
-        raise HTTPException(status_code=404, detail="Cover image not found")
+        raise HTTPException(status_code=404, detail='Cover image not found')
 
     if ull.cover_id == cover_obj.id:
         ull.cover_id = None
@@ -423,6 +436,7 @@ async def delete_cover_service(
         session=session,
         user_id=user_id,
         isocode=isocode,
+        lang=lang,
         models=models,
     )
 
@@ -431,6 +445,7 @@ async def global_languages_list_service(
     *,
     session: AsyncSession,
     params: LanguagesListParams,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LanguagesListOut:
     stmt = build_global_languages_stmt(
@@ -447,7 +462,7 @@ async def global_languages_list_service(
         .mappings()
         .all()
     )
-    results = [map_language_row(dict(r)) for r in rows]
+    results = [map_language_row(dict(r), lang=lang) for r in rows]
     return LanguagesListOut(count=total, results=results)
 
 
@@ -455,6 +470,7 @@ async def interface_languages_list_service(
     *,
     session: AsyncSession,
     params: LanguagesListParams,
+    lang: str | None = None,
     models: dict = LANGUAGE_MODELS,
 ) -> LanguagesListOut:
     stmt = build_global_languages_stmt(
@@ -471,5 +487,5 @@ async def interface_languages_list_service(
         .mappings()
         .all()
     )
-    results = [map_language_row(dict(r)) for r in rows]
+    results = [map_language_row(dict(r), lang=lang) for r in rows]
     return LanguagesListOut(count=total, results=results)

@@ -20,118 +20,118 @@ from sa_users.models import SaUser
 
 class SaVocabularyWordTypes(models.Model):
     word = models.ForeignKey(
-        "SaWord", on_delete=models.DO_NOTHING, db_column="word_id", related_name="+"
+        'SaWord', on_delete=models.DO_NOTHING, db_column='word_id', related_name='+'
     )
     word_type = models.ForeignKey(
-        "SaWordType",
+        'SaWordType',
         on_delete=models.DO_NOTHING,
-        db_column="wordtype_id",
-        related_name="+",
+        db_column='wordtype_id',
+        related_name='+',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_word_types"
+        db_table = 'vocabulary_word_types'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "word_type"], name="uniq_word_wordtype"
+                fields=['word', 'word_type'], name='uniq_word_wordtype'
             ),
         ]
 
 
 class SaVocabularyWordTags(models.Model):
     word = models.ForeignKey(
-        "SaWord", on_delete=models.DO_NOTHING, db_column="word_id", related_name="+"
+        'SaWord', on_delete=models.DO_NOTHING, db_column='word_id', related_name='+'
     )
     tag = models.ForeignKey(
-        SaTag, on_delete=models.DO_NOTHING, db_column="tag_id", related_name="+"
+        SaTag, on_delete=models.DO_NOTHING, db_column='tag_id', related_name='+'
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_word_tags"
+        db_table = 'vocabulary_word_tags'
         constraints = [
-            models.UniqueConstraint(fields=["word", "tag"], name="uniq_word_tag"),
+            models.UniqueConstraint(fields=['word', 'tag'], name='uniq_word_tag'),
         ]
 
 
 class SaVocabularyCollectionTags(models.Model):
     collection = models.ForeignKey(
-        "SaCollection",
+        'SaCollection',
         on_delete=models.DO_NOTHING,
-        db_column="collection_id",
-        related_name="+",
+        db_column='collection_id',
+        related_name='+',
     )
     tag = models.ForeignKey(
-        SaTag, on_delete=models.DO_NOTHING, db_column="tag_id", related_name="+"
+        SaTag, on_delete=models.DO_NOTHING, db_column='tag_id', related_name='+'
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_collection_tags"
+        db_table = 'vocabulary_collection_tags'
         constraints = [
             models.UniqueConstraint(
-                fields=["collection", "tag"], name="uniq_collection_tag"
+                fields=['collection', 'tag'], name='uniq_collection_tag'
             ),
         ]
 
 
 class SaVocabularyCollectionCoauthors(models.Model):
     collection = models.ForeignKey(
-        "SaCollection",
+        'SaCollection',
         on_delete=models.DO_NOTHING,
-        db_column="collection_id",
-        related_name="+",
+        db_column='collection_id',
+        related_name='+',
     )
     user = models.ForeignKey(
-        SaUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+        SaUser, on_delete=models.DO_NOTHING, db_column='user_id', related_name='+'
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_collection_coauthors"
+        db_table = 'vocabulary_collection_coauthors'
         constraints = [
             models.UniqueConstraint(
-                fields=["collection", "user"], name="uniq_collection_coauthor"
+                fields=['collection', 'user'], name='uniq_collection_coauthor'
             ),
         ]
 
 
 class SaVocabularyWordShareWith(models.Model):
     word = models.ForeignKey(
-        "SaWord", on_delete=models.DO_NOTHING, db_column="word_id", related_name="+"
+        'SaWord', on_delete=models.DO_NOTHING, db_column='word_id', related_name='+'
     )
     user = models.ForeignKey(
-        SaUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+        SaUser, on_delete=models.DO_NOTHING, db_column='user_id', related_name='+'
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_word_share_with"
+        db_table = 'vocabulary_word_share_with'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "user"], name="uniq_word_share_with"
+                fields=['word', 'user'], name='uniq_word_share_with'
             ),
         ]
 
 
 class SaVocabularyCollectionShareWith(models.Model):
     collection = models.ForeignKey(
-        "SaCollection",
+        'SaCollection',
         on_delete=models.DO_NOTHING,
-        db_column="collection_id",
-        related_name="+",
+        db_column='collection_id',
+        related_name='+',
     )
     user = models.ForeignKey(
-        SaUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+        SaUser, on_delete=models.DO_NOTHING, db_column='user_id', related_name='+'
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_collection_share_with"
+        db_table = 'vocabulary_collection_share_with'
         constraints = [
             models.UniqueConstraint(
-                fields=["collection", "user"], name="uniq_collection_share_with"
+                fields=['collection', 'user'], name='uniq_collection_share_with'
             ),
         ]
 
@@ -147,7 +147,7 @@ class SaWordType(SaStampedModel, SaSlugModel, WordsCountMixin):
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordtype"
+        db_table = 'vocabulary_wordtype'
 
     def __str__(self) -> str:
         return self.name_en or self.name_ru
@@ -164,7 +164,7 @@ class SaWord(SaStampedModel, SaSlugModel, SaPublicAccessModel):
     )  # TODO: VocabularyLengthLimits.MAX_WORD_LENGTH
 
     activity_status = models.CharField(
-        max_length=32, default="INACTIVE"
+        max_length=32, default='INACTIVE'
     )  # TODO: ActivityStatusEnum.max_length
     activity_progress = models.SmallIntegerField(default=0)
 
@@ -182,49 +182,49 @@ class SaWord(SaStampedModel, SaSlugModel, SaPublicAccessModel):
     language = models.ForeignKey(
         SaLanguage,
         on_delete=models.DO_NOTHING,  # в БД SET NULL
-        db_column="language_id",
+        db_column='language_id',
         null=True,
         blank=True,
-        related_name="words",
+        related_name='words',
     )
     source_word = models.ForeignKey(
-        "self",
+        'self',
         on_delete=models.DO_NOTHING,  # в БД SET NULL
-        db_column="source_word_id",
+        db_column='source_word_id',
         null=True,
         blank=True,
-        related_name="borrowings",
+        related_name='borrowings',
     )
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,  # в БД CASCADE
-        db_column="author_id",
-        related_name="words",
+        db_column='author_id',
+        related_name='words',
     )
 
     # M2M
     types = models.ManyToManyField(
         SaWordType,
         through=SaVocabularyWordTypes,
-        related_name="words",
+        related_name='words',
         blank=True,
     )
     tags = models.ManyToManyField(
         SaTag,
         through=SaVocabularyWordTags,
-        related_name="words",
+        related_name='words',
         blank=True,
     )
     share_with = models.ManyToManyField(
         SaUser,
         through=SaVocabularyWordShareWith,
-        related_name="shared_words",
+        related_name='shared_words',
         blank=True,
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_word"
+        db_table = 'vocabulary_word'
         # case-insensitive уникальность (lower(text), author, language) — в Alembic.
 
     def __str__(self) -> str:
@@ -244,7 +244,7 @@ class SaExerciseSessionHistory(SaStampedModel):
 
     class Meta:
         managed = False
-        db_table = "exercises_exercisesessionhistory"
+        db_table = 'exercises_exercisesessionhistory'
 
 
 class SaWordActivityHistory(SaStampedModel):
@@ -255,31 +255,31 @@ class SaWordActivityHistory(SaStampedModel):
     session = models.ForeignKey(
         SaExerciseSessionHistory,
         on_delete=models.DO_NOTHING,
-        db_column="session_id",
+        db_column='session_id',
         null=True,
         blank=True,
-        related_name="words_activity_changes",
+        related_name='words_activity_changes',
     )
     word = models.ForeignKey(
         SaWord,
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="activity_history",
+        db_column='word_id',
+        related_name='activity_history',
     )
 
     previous_activity_status = models.CharField(
-        max_length=32, default="INACTIVE"
+        max_length=32, default='INACTIVE'
     )  # TODO: ActivityStatusEnum.max_length
     new_activity_status = models.CharField(
-        max_length=32, default="ACTIVE"
+        max_length=32, default='ACTIVE'
     )  # TODO: ActivityStatusEnum.max_length
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordactivityhistory"
+        db_table = 'vocabulary_wordactivityhistory'
 
     def __str__(self) -> str:
-        return f"{self.word_id} @ {self.created}"
+        return f'{self.word_id} @ {self.created}'
 
 
 # -----------------------
@@ -299,21 +299,21 @@ class SaFormGroup(SaStampedModel, SaSlugModel, WordsCountMixin):
     language = models.ForeignKey(
         SaLanguage,
         on_delete=models.DO_NOTHING,  # SET NULL
-        db_column="language_id",
+        db_column='language_id',
         null=True,
         blank=True,
-        related_name="form_groups",
+        related_name='form_groups',
     )
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,  # CASCADE
-        db_column="author_id",
-        related_name="form_groups",
+        db_column='author_id',
+        related_name='form_groups',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_formgroup"
+        db_table = 'vocabulary_formgroup'
         # functional unique lower(name)+author — в Alembic.
 
     def __str__(self) -> str:
@@ -333,21 +333,21 @@ class SaWordTranslation(SaStampedModel, SaSlugModel, WordsCountMixin):
     language = models.ForeignKey(
         SaLanguage,
         on_delete=models.DO_NOTHING,
-        db_column="language_id",
+        db_column='language_id',
         null=True,
         blank=True,
-        related_name="word_translations",
+        related_name='word_translations',
     )
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="author_id",
-        related_name="word_translations",
+        db_column='author_id',
+        related_name='word_translations',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordtranslation"
+        db_table = 'vocabulary_wordtranslation'
         # functional unique lower(text)+author+language — в Alembic.
 
     def __str__(self) -> str:
@@ -370,21 +370,21 @@ class SaDefinition(SaStampedModel, SaSlugModel, WordsCountMixin):
     language = models.ForeignKey(
         SaLanguage,
         on_delete=models.DO_NOTHING,
-        db_column="language_id",
+        db_column='language_id',
         null=True,
         blank=True,
-        related_name="definitions",
+        related_name='definitions',
     )
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="author_id",
-        related_name="definitions",
+        db_column='author_id',
+        related_name='definitions',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_definition"
+        db_table = 'vocabulary_definition'
         # functional unique lower(text)+author — в Alembic.
 
     def __str__(self) -> str:
@@ -402,7 +402,7 @@ class SaUsageExample(SaStampedModel, SaSlugModel, WordsCountMixin):
     )  # TODO: VocabularyLengthLimits.MAX_EXAMPLE_LENGTH
     translation = models.CharField(max_length=2048, null=True, blank=True)  # TODO
 
-    source = models.CharField(max_length=3, default="OTH")
+    source = models.CharField(max_length=3, default='OTH')
     source_name = models.CharField(
         max_length=256, null=True, blank=True
     )  # TODO: VocabularyLengthLimits.MAX_EXAMPLE_SOURCE_LENGTH
@@ -413,21 +413,21 @@ class SaUsageExample(SaStampedModel, SaSlugModel, WordsCountMixin):
     language = models.ForeignKey(
         SaLanguage,
         on_delete=models.DO_NOTHING,
-        db_column="language_id",
+        db_column='language_id',
         null=True,
         blank=True,
-        related_name="examples",
+        related_name='examples',
     )
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="author_id",
-        related_name="examples",
+        db_column='author_id',
+        related_name='examples',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_usageexample"
+        db_table = 'vocabulary_usageexample'
         # functional unique lower(text)+author — в Alembic.
 
     def __str__(self) -> str:
@@ -439,7 +439,7 @@ class SaUsageExample(SaStampedModel, SaSlugModel, WordsCountMixin):
 # -----------------------
 
 
-class SaImageAssociation(SaStampedModel, SaSlugModel, WordsCountMixin):
+class SaImageAssociation(SaStampedModel, WordsCountMixin):
     image_url = models.CharField(max_length=1024, null=True, blank=True)
     width = models.SmallIntegerField(null=True, blank=True)
     height = models.SmallIntegerField(null=True, blank=True)
@@ -448,13 +448,13 @@ class SaImageAssociation(SaStampedModel, SaSlugModel, WordsCountMixin):
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="author_id",
-        related_name="image_associations",
+        db_column='author_id',
+        related_name='image_associations',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_imageassociation"
+        db_table = 'vocabulary_imageassociation'
 
     def __str__(self) -> str:
         return str(self.id)
@@ -476,13 +476,13 @@ class SaQuoteAssociation(SaStampedModel):
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="author_id",
-        related_name="quote_associations",
+        db_column='author_id',
+        related_name='quote_associations',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_quoteassociation"
+        db_table = 'vocabulary_quoteassociation'
 
     def __str__(self) -> str:
         return self.text[:80]
@@ -507,42 +507,42 @@ class SaCollection(SaStampedModel, SaSlugModel, SaPublicAccessModel, WordsCountM
     is_premium = models.BooleanField(default=False)
 
     source_collection = models.ForeignKey(
-        "self",
+        'self',
         on_delete=models.DO_NOTHING,  # SET NULL
-        db_column="source_collection_id",
+        db_column='source_collection_id',
         null=True,
         blank=True,
-        related_name="borrowings",
+        related_name='borrowings',
     )
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,  # CASCADE
-        db_column="author_id",
-        related_name="collections",
+        db_column='author_id',
+        related_name='collections',
     )
 
     tags = models.ManyToManyField(
         SaTag,
         through=SaVocabularyCollectionTags,
-        related_name="collections",
+        related_name='collections',
         blank=True,
     )
     coauthors = models.ManyToManyField(
         SaUser,
         through=SaVocabularyCollectionCoauthors,
-        related_name="joint_collections",
+        related_name='joint_collections',
         blank=True,
     )
     share_with = models.ManyToManyField(
         SaUser,
         through=SaVocabularyCollectionShareWith,
-        related_name="shared_collections",
+        related_name='shared_collections',
         blank=True,
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_collection"
+        db_table = 'vocabulary_collection'
         # functional unique lower(title)+author — в Alembic.
 
     def __str__(self) -> str:
@@ -562,28 +562,28 @@ class SaCollectionSubscription(SaStampedModel):
     subscriber = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,  # CASCADE
-        db_column="subscriber_id",
-        related_name="collections_subscriptions_detail",
+        db_column='subscriber_id',
+        related_name='collections_subscriptions_detail',
     )
     collection = models.ForeignKey(
         SaCollection,
         on_delete=models.DO_NOTHING,  # CASCADE
-        db_column="collection_id",
-        related_name="subscribers_detail",
+        db_column='collection_id',
+        related_name='subscribers_detail',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_collectionsubscription"
+        db_table = 'vocabulary_collectionsubscription'
         constraints = [
             models.UniqueConstraint(
-                fields=["subscriber", "collection"],
-                name="unique_collection_subscription",
+                fields=['subscriber', 'collection'],
+                name='unique_collection_subscription',
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.subscriber_id} -> {self.collection_id}"
+        return f'{self.subscriber_id} -> {self.collection_id}'
 
 
 # -------------------------
@@ -593,166 +593,166 @@ class SaCollectionSubscription(SaStampedModel):
 
 class SaWordsFormGroups(SaStampedModel):
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,  # в БД CASCADE
-        db_column="word_id",
-        related_name="words_form_groups",
+        db_column='word_id',
+        related_name='words_form_groups',
     )
     forms_group = models.ForeignKey(
-        "SaFormGroup",
+        'SaFormGroup',
         on_delete=models.DO_NOTHING,  # в БД SET NULL
-        db_column="forms_group_id",
+        db_column='forms_group_id',
         null=True,
         blank=True,
-        related_name="words_form_groups",
+        related_name='words_form_groups',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordsformgroups"
+        db_table = 'vocabulary_wordsformgroups'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "forms_group"], name="unique_word_forms_group"
+                fields=['word', 'forms_group'], name='unique_word_forms_group'
             ),
         ]
 
 
 class SaWordTranslations(SaStampedModel):
     translation = models.ForeignKey(
-        "SaWordTranslation",
+        'SaWordTranslation',
         on_delete=models.DO_NOTHING,
-        db_column="translation_id",
-        related_name="wordtranslations",
+        db_column='translation_id',
+        related_name='wordtranslations',
     )
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="wordtranslations",
+        db_column='word_id',
+        related_name='wordtranslations',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordtranslations"
+        db_table = 'vocabulary_wordtranslations'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "translation"], name="unique_word_translation"
+                fields=['word', 'translation'], name='unique_word_translation'
             ),
         ]
 
 
 class SaWordDefinitions(SaStampedModel):
     definition = models.ForeignKey(
-        "SaDefinition",
+        'SaDefinition',
         on_delete=models.DO_NOTHING,
-        db_column="definition_id",
-        related_name="worddefinitions",
+        db_column='definition_id',
+        related_name='worddefinitions',
     )
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="worddefinitions",
+        db_column='word_id',
+        related_name='worddefinitions',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_worddefinitions"
+        db_table = 'vocabulary_worddefinitions'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "definition"], name="unique_word_definition"
+                fields=['word', 'definition'], name='unique_word_definition'
             ),
         ]
 
 
 class SaWordUsageExamples(SaStampedModel):
     example = models.ForeignKey(
-        "SaUsageExample",
+        'SaUsageExample',
         on_delete=models.DO_NOTHING,
-        db_column="example_id",
-        related_name="wordusageexamples",
+        db_column='example_id',
+        related_name='wordusageexamples',
     )
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="wordusageexamples",
+        db_column='word_id',
+        related_name='wordusageexamples',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordusageexamples"
+        db_table = 'vocabulary_wordusageexamples'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "example"], name="unique_word_example"
+                fields=['word', 'example'], name='unique_word_example'
             ),
         ]
 
 
 class SaWordImageAssociations(SaStampedModel):
     image = models.ForeignKey(
-        "SaImageAssociation",
+        'SaImageAssociation',
         on_delete=models.DO_NOTHING,
-        db_column="image_id",
-        related_name="wordimageassociations",
+        db_column='image_id',
+        related_name='wordimageassociations',
     )
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="wordimageassociations",
+        db_column='word_id',
+        related_name='wordimageassociations',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordimageassociations"
+        db_table = 'vocabulary_wordimageassociations'
         constraints = [
-            models.UniqueConstraint(fields=["word", "image"], name="unique_word_image"),
+            models.UniqueConstraint(fields=['word', 'image'], name='unique_word_image'),
         ]
 
 
 class SaWordQuoteAssociations(SaStampedModel):
     quote = models.ForeignKey(
-        "SaQuoteAssociation",
+        'SaQuoteAssociation',
         on_delete=models.DO_NOTHING,
-        db_column="quote_id",
-        related_name="wordquoteassociations",
+        db_column='quote_id',
+        related_name='wordquoteassociations',
     )
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="wordquoteassociations",
+        db_column='word_id',
+        related_name='wordquoteassociations',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordquoteassociations"
+        db_table = 'vocabulary_wordquoteassociations'
         constraints = [
-            models.UniqueConstraint(fields=["word", "quote"], name="unique_word_quote"),
+            models.UniqueConstraint(fields=['word', 'quote'], name='unique_word_quote'),
         ]
 
 
 class SaWordsInCollections(SaStampedModel):
     collection = models.ForeignKey(
-        "SaCollection",
+        'SaCollection',
         on_delete=models.DO_NOTHING,
-        db_column="collection_id",
-        related_name="words_in_collections",
+        db_column='collection_id',
+        related_name='words_in_collections',
     )
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="words_in_collections",
+        db_column='word_id',
+        related_name='words_in_collections',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordsincollections"
+        db_table = 'vocabulary_wordsincollections'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "collection"], name="unique_word_in_collection"
+                fields=['word', 'collection'], name='unique_word_in_collection'
             ),
         ]
 
@@ -760,34 +760,34 @@ class SaWordsInCollections(SaStampedModel):
 class SaWordsSuggestedToCollections(SaStampedModel):
     status = models.CharField(
         max_length=32,  # TODO: RequestStatusEnum.max_length
-        default="PENDING",
+        default='PENDING',
     )
 
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="suggestions",
+        db_column='word_id',
+        related_name='suggestions',
     )
     collection = models.ForeignKey(
-        "SaCollection",
+        'SaCollection',
         on_delete=models.DO_NOTHING,
-        db_column="collection_id",
-        related_name="suggestions",
+        db_column='collection_id',
+        related_name='suggestions',
     )
     user = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="user_id",
-        related_name="words_suggested",
+        db_column='user_id',
+        related_name='words_suggested',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordssuggestedtocollections"
+        db_table = 'vocabulary_wordssuggestedtocollections'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "collection", "user"], name="unique_suggested_word"
+                fields=['word', 'collection', 'user'], name='unique_suggested_word'
             ),
         ]
 
@@ -804,16 +804,16 @@ class SaWordSelfRelationBase(SaStampedModel):
     """
 
     from_word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="from_word_id",
-        related_name="%(class)s_from_words",
+        db_column='from_word_id',
+        related_name='%(class)s_from_words',
     )
     to_word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="to_word_id",
-        related_name="%(class)s_to_words",
+        db_column='to_word_id',
+        related_name='%(class)s_to_words',
     )
 
     class Meta:
@@ -828,14 +828,14 @@ class SaSynonym(SaWordSelfRelationBase):
 
     class Meta:
         managed = False
-        db_table = "vocabulary_synonym"
+        db_table = 'vocabulary_synonym'
         constraints = [
             models.UniqueConstraint(
-                fields=["from_word", "to_word"], name="uniq_pair_synonym"
+                fields=['from_word', 'to_word'], name='uniq_pair_synonym'
             ),
             models.CheckConstraint(
-                check=~models.Q(from_word=models.F("to_word")),
-                name="synonym_not_same_word",
+                check=~models.Q(from_word=models.F('to_word')),
+                name='synonym_not_same_word',
             ),
         ]
 
@@ -847,14 +847,14 @@ class SaAntonym(SaWordSelfRelationBase):
 
     class Meta:
         managed = False
-        db_table = "vocabulary_antonym"
+        db_table = 'vocabulary_antonym'
         constraints = [
             models.UniqueConstraint(
-                fields=["from_word", "to_word"], name="uniq_pair_antonym"
+                fields=['from_word', 'to_word'], name='uniq_pair_antonym'
             ),
             models.CheckConstraint(
-                check=~models.Q(from_word=models.F("to_word")),
-                name="antonym_not_same_word",
+                check=~models.Q(from_word=models.F('to_word')),
+                name='antonym_not_same_word',
             ),
         ]
 
@@ -862,14 +862,14 @@ class SaAntonym(SaWordSelfRelationBase):
 class SaForm(SaWordSelfRelationBase):
     class Meta:
         managed = False
-        db_table = "vocabulary_form"
+        db_table = 'vocabulary_form'
         constraints = [
             models.UniqueConstraint(
-                fields=["from_word", "to_word"], name="uniq_pair_form"
+                fields=['from_word', 'to_word'], name='uniq_pair_form'
             ),
             models.CheckConstraint(
-                check=~models.Q(from_word=models.F("to_word")),
-                name="form_not_same_word",
+                check=~models.Q(from_word=models.F('to_word')),
+                name='form_not_same_word',
             ),
         ]
 
@@ -877,14 +877,14 @@ class SaForm(SaWordSelfRelationBase):
 class SaDerivative(SaWordSelfRelationBase):
     class Meta:
         managed = False
-        db_table = "vocabulary_derivative"
+        db_table = 'vocabulary_derivative'
         constraints = [
             models.UniqueConstraint(
-                fields=["from_word", "to_word"], name="uniq_pair_derivative"
+                fields=['from_word', 'to_word'], name='uniq_pair_derivative'
             ),
             models.CheckConstraint(
-                check=~models.Q(from_word=models.F("to_word")),
-                name="derivative_not_same_word",
+                check=~models.Q(from_word=models.F('to_word')),
+                name='derivative_not_same_word',
             ),
         ]
 
@@ -892,14 +892,14 @@ class SaDerivative(SaWordSelfRelationBase):
 class SaSimilar(SaWordSelfRelationBase):
     class Meta:
         managed = False
-        db_table = "vocabulary_similar"
+        db_table = 'vocabulary_similar'
         constraints = [
             models.UniqueConstraint(
-                fields=["from_word", "to_word"], name="uniq_pair_similar"
+                fields=['from_word', 'to_word'], name='uniq_pair_similar'
             ),
             models.CheckConstraint(
-                check=~models.Q(from_word=models.F("to_word")),
-                name="similar_not_same_word",
+                check=~models.Q(from_word=models.F('to_word')),
+                name='similar_not_same_word',
             ),
         ]
 
@@ -911,48 +911,48 @@ class SaSimilar(SaWordSelfRelationBase):
 
 class SaFavoriteWord(SaStampedModel):
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="favorite_for",
+        db_column='word_id',
+        related_name='favorite_for',
     )
     user = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="user_id",
-        related_name="favorite_words",
+        db_column='user_id',
+        related_name='favorite_words',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_favoriteword"
+        db_table = 'vocabulary_favoriteword'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "user"], name="unique_user_favorite_word"
+                fields=['word', 'user'], name='unique_user_favorite_word'
             ),
         ]
 
 
 class SaFavoriteCollection(SaStampedModel):
     collection = models.ForeignKey(
-        "SaCollection",
+        'SaCollection',
         on_delete=models.DO_NOTHING,
-        db_column="collection_id",
-        related_name="favorite_for",
+        db_column='collection_id',
+        related_name='favorite_for',
     )
     user = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="user_id",
-        related_name="favorite_collections",
+        db_column='user_id',
+        related_name='favorite_collections',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_favoritecollection"
+        db_table = 'vocabulary_favoritecollection'
         constraints = [
             models.UniqueConstraint(
-                fields=["collection", "user"], name="unique_user_favorite_collection"
+                fields=['collection', 'user'], name='unique_user_favorite_collection'
             ),
         ]
 
@@ -961,20 +961,20 @@ class SaViewWord(SaStampedModel):
     view_datetime = models.DateTimeField(null=True, blank=True)
 
     word = models.ForeignKey(
-        "SaWord", on_delete=models.DO_NOTHING, db_column="word_id", related_name="views"
+        'SaWord', on_delete=models.DO_NOTHING, db_column='word_id', related_name='views'
     )
     user = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="user_id",
-        related_name="word_views",
+        db_column='user_id',
+        related_name='word_views',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_viewword"
+        db_table = 'vocabulary_viewword'
         constraints = [
-            models.UniqueConstraint(fields=["word", "user"], name="unique_word_view"),
+            models.UniqueConstraint(fields=['word', 'user'], name='unique_word_view'),
         ]
 
 
@@ -982,48 +982,48 @@ class SaViewCollection(SaStampedModel):
     view_datetime = models.DateTimeField(null=True, blank=True)
 
     collection = models.ForeignKey(
-        "SaCollection",
+        'SaCollection',
         on_delete=models.DO_NOTHING,
-        db_column="collection_id",
-        related_name="views",
+        db_column='collection_id',
+        related_name='views',
     )
     user = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="user_id",
-        related_name="collection_views",
+        db_column='user_id',
+        related_name='collection_views',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_viewcollection"
+        db_table = 'vocabulary_viewcollection'
         constraints = [
             models.UniqueConstraint(
-                fields=["collection", "user"], name="unique_collection_view"
+                fields=['collection', 'user'], name='unique_collection_view'
             ),
         ]
 
 
 class SaWordApprove(SaStampedModel):
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="approves",
+        db_column='word_id',
+        related_name='approves',
     )
     user = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="user_id",
-        related_name="approves",
+        db_column='user_id',
+        related_name='approves',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordapprove"
+        db_table = 'vocabulary_wordapprove'
         constraints = [
             models.UniqueConstraint(
-                fields=["word", "user"], name="unique_word_approve"
+                fields=['word', 'user'], name='unique_word_approve'
             ),
         ]
 
@@ -1033,41 +1033,41 @@ class SaPremiumRequest(SaStampedModel):
         max_length=2048, null=True, blank=True
     )  # TODO: CoreLengthLimits.REVIEW_TEXT_MAX_LENGTH
     request_status = models.CharField(
-        max_length=32, default="PENDING"
+        max_length=32, default='PENDING'
     )  # TODO: RequestStatusEnum.max_length
 
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
+        db_column='word_id',
         null=True,
         blank=True,
-        related_name="premium_requests",
+        related_name='premium_requests',
     )
     collection = models.ForeignKey(
-        "SaCollection",
+        'SaCollection',
         on_delete=models.DO_NOTHING,
-        db_column="collection_id",
+        db_column='collection_id',
         null=True,
         blank=True,
-        related_name="premium_requests",
+        related_name='premium_requests',
     )
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="author_id",
-        related_name="premium_requests",
+        db_column='author_id',
+        related_name='premium_requests',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_premiumrequest"
+        db_table = 'vocabulary_premiumrequest'
         # В Sa word_id/collection_id unique=True (one-to-one semantics).
         # В Django это можно отразить constraints'ами:
         constraints = [
-            models.UniqueConstraint(fields=["word"], name="uniq_premium_word"),
+            models.UniqueConstraint(fields=['word'], name='uniq_premium_word'),
             models.UniqueConstraint(
-                fields=["collection"], name="uniq_premium_collection"
+                fields=['collection'], name='uniq_premium_collection'
             ),
         ]
 
@@ -1083,45 +1083,45 @@ class SaCollectionComment(SaStampedModel):
     text_modified = models.BooleanField(default=False)
 
     collection = models.ForeignKey(
-        "SaCollection",
+        'SaCollection',
         on_delete=models.DO_NOTHING,
-        db_column="collection_id",
-        related_name="comments",
+        db_column='collection_id',
+        related_name='comments',
     )
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="author_id",
-        related_name="collection_comments",
+        db_column='author_id',
+        related_name='collection_comments',
     )
 
     # likes/dislikes/answers через secondary таблицы
     likes = models.ManyToManyField(
         SaUser,
-        through="SaVocabularyCollectionCommentLikes",
-        related_name="collection_comments_liked",
+        through='SaVocabularyCollectionCommentLikes',
+        related_name='collection_comments_liked',
         blank=True,
     )
     dislikes = models.ManyToManyField(
         SaUser,
-        through="SaVocabularyCollectionCommentDislikes",
-        related_name="collection_comments_disliked",
+        through='SaVocabularyCollectionCommentDislikes',
+        related_name='collection_comments_disliked',
         blank=True,
     )
     answers = models.ManyToManyField(
-        "self",
-        through="SaVocabularyCollectionCommentAnswers",
+        'self',
+        through='SaVocabularyCollectionCommentAnswers',
         symmetrical=False,
-        related_name="answer_for",
+        related_name='answer_for',
         blank=True,
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_collectioncomment"
+        db_table = 'vocabulary_collectioncomment'
 
     def __str__(self) -> str:
-        return f"CollectionComment({self.id})"
+        return f'CollectionComment({self.id})'
 
 
 class SaWordComment(SaStampedModel):
@@ -1130,44 +1130,44 @@ class SaWordComment(SaStampedModel):
     text_modified = models.BooleanField(default=False)
 
     word = models.ForeignKey(
-        "SaWord",
+        'SaWord',
         on_delete=models.DO_NOTHING,
-        db_column="word_id",
-        related_name="comments",
+        db_column='word_id',
+        related_name='comments',
     )
     author = models.ForeignKey(
         SaUser,
         on_delete=models.DO_NOTHING,
-        db_column="author_id",
-        related_name="word_comments",
+        db_column='author_id',
+        related_name='word_comments',
     )
 
     likes = models.ManyToManyField(
         SaUser,
-        through="SaVocabularyWordCommentLikes",
-        related_name="word_comments_liked",
+        through='SaVocabularyWordCommentLikes',
+        related_name='word_comments_liked',
         blank=True,
     )
     dislikes = models.ManyToManyField(
         SaUser,
-        through="SaVocabularyWordCommentDislikes",
-        related_name="word_comments_disliked",
+        through='SaVocabularyWordCommentDislikes',
+        related_name='word_comments_disliked',
         blank=True,
     )
     answers = models.ManyToManyField(
-        "self",
-        through="SaVocabularyWordCommentAnswers",
+        'self',
+        through='SaVocabularyWordCommentAnswers',
         symmetrical=False,
-        related_name="answer_for",
+        related_name='answer_for',
         blank=True,
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordcomment"
+        db_table = 'vocabulary_wordcomment'
 
     def __str__(self) -> str:
-        return f"WordComment({self.id})"
+        return f'WordComment({self.id})'
 
 
 # ===== Through tables for comment likes/dislikes/answers =====
@@ -1178,19 +1178,19 @@ class SaVocabularyCollectionCommentLikes(models.Model):
     collectioncomment = models.ForeignKey(
         SaCollectionComment,
         on_delete=models.DO_NOTHING,
-        db_column="collectioncomment_id",
-        related_name="+",
+        db_column='collectioncomment_id',
+        related_name='+',
     )
     user = models.ForeignKey(
-        SaUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+        SaUser, on_delete=models.DO_NOTHING, db_column='user_id', related_name='+'
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_collectioncomment_likes"
+        db_table = 'vocabulary_collectioncomment_likes'
         constraints = [
             models.UniqueConstraint(
-                fields=["collectioncomment", "user"], name="uniq_colcom_like"
+                fields=['collectioncomment', 'user'], name='uniq_colcom_like'
             ),
         ]
 
@@ -1199,19 +1199,19 @@ class SaVocabularyCollectionCommentDislikes(models.Model):
     collectioncomment = models.ForeignKey(
         SaCollectionComment,
         on_delete=models.DO_NOTHING,
-        db_column="collectioncomment_id",
-        related_name="+",
+        db_column='collectioncomment_id',
+        related_name='+',
     )
     user = models.ForeignKey(
-        SaUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+        SaUser, on_delete=models.DO_NOTHING, db_column='user_id', related_name='+'
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_collectioncomment_dislikes"
+        db_table = 'vocabulary_collectioncomment_dislikes'
         constraints = [
             models.UniqueConstraint(
-                fields=["collectioncomment", "user"], name="uniq_colcom_dislike"
+                fields=['collectioncomment', 'user'], name='uniq_colcom_dislike'
             ),
         ]
 
@@ -1220,22 +1220,22 @@ class SaVocabularyCollectionCommentAnswers(models.Model):
     collectioncomment = models.ForeignKey(
         SaCollectionComment,
         on_delete=models.DO_NOTHING,
-        db_column="collectioncomment_id",
-        related_name="+",
+        db_column='collectioncomment_id',
+        related_name='+',
     )
     answer = models.ForeignKey(
         SaCollectionComment,
         on_delete=models.DO_NOTHING,
-        db_column="answer_id",
-        related_name="+",
+        db_column='answer_id',
+        related_name='+',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_collectioncomment_answers"
+        db_table = 'vocabulary_collectioncomment_answers'
         constraints = [
             models.UniqueConstraint(
-                fields=["collectioncomment", "answer"], name="uniq_colcom_answer"
+                fields=['collectioncomment', 'answer'], name='uniq_colcom_answer'
             ),
         ]
 
@@ -1244,19 +1244,19 @@ class SaVocabularyWordCommentLikes(models.Model):
     wordcomment = models.ForeignKey(
         SaWordComment,
         on_delete=models.DO_NOTHING,
-        db_column="wordcomment_id",
-        related_name="+",
+        db_column='wordcomment_id',
+        related_name='+',
     )
     user = models.ForeignKey(
-        SaUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+        SaUser, on_delete=models.DO_NOTHING, db_column='user_id', related_name='+'
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordcomment_likes"
+        db_table = 'vocabulary_wordcomment_likes'
         constraints = [
             models.UniqueConstraint(
-                fields=["wordcomment", "user"], name="uniq_wordcom_like"
+                fields=['wordcomment', 'user'], name='uniq_wordcom_like'
             ),
         ]
 
@@ -1265,19 +1265,19 @@ class SaVocabularyWordCommentDislikes(models.Model):
     wordcomment = models.ForeignKey(
         SaWordComment,
         on_delete=models.DO_NOTHING,
-        db_column="wordcomment_id",
-        related_name="+",
+        db_column='wordcomment_id',
+        related_name='+',
     )
     user = models.ForeignKey(
-        SaUser, on_delete=models.DO_NOTHING, db_column="user_id", related_name="+"
+        SaUser, on_delete=models.DO_NOTHING, db_column='user_id', related_name='+'
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordcomment_dislikes"
+        db_table = 'vocabulary_wordcomment_dislikes'
         constraints = [
             models.UniqueConstraint(
-                fields=["wordcomment", "user"], name="uniq_wordcom_dislike"
+                fields=['wordcomment', 'user'], name='uniq_wordcom_dislike'
             ),
         ]
 
@@ -1286,21 +1286,21 @@ class SaVocabularyWordCommentAnswers(models.Model):
     wordcomment = models.ForeignKey(
         SaWordComment,
         on_delete=models.DO_NOTHING,
-        db_column="wordcomment_id",
-        related_name="+",
+        db_column='wordcomment_id',
+        related_name='+',
     )
     answer = models.ForeignKey(
         SaWordComment,
         on_delete=models.DO_NOTHING,
-        db_column="answer_id",
-        related_name="+",
+        db_column='answer_id',
+        related_name='+',
     )
 
     class Meta:
         managed = False
-        db_table = "vocabulary_wordcomment_answers"
+        db_table = 'vocabulary_wordcomment_answers'
         constraints = [
             models.UniqueConstraint(
-                fields=["wordcomment", "answer"], name="uniq_wordcom_answer"
+                fields=['wordcomment', 'answer'], name='uniq_wordcom_answer'
             ),
         ]

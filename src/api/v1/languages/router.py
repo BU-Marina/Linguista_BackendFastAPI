@@ -1,10 +1,11 @@
 """Languages api endpoints."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.db import get_async_session
 from auth.setup import current_user, optional_current_user
+from core.utils.i18n import parse_accept_language
 
 from .schemas import (
     CoverDeleteIn,
@@ -33,10 +34,10 @@ from .services import (
     set_cover_service,
 )
 
-router = APIRouter(prefix="/languages", tags=["languages"])
+router = APIRouter(prefix='/languages', tags=['languages'])
 
 
-@router.get("", response_model=LearningLanguagesListOut)
+@router.get('', response_model=LearningLanguagesListOut)
 async def learning_languages_list(
     page: int = Query(1, ge=1),
     limit: int = Query(32, ge=1, le=500),
@@ -44,6 +45,7 @@ async def learning_languages_list(
     search: str | None = Query(None),
     session: AsyncSession = Depends(get_async_session),
     request_user=Depends(current_user),
+    accept_language: str | None = Header(None),
 ):
     params = build_languages_list_params(
         page=page, limit=limit, ordering=ordering, search=search
@@ -52,10 +54,11 @@ async def learning_languages_list(
         session=session,
         user_id=request_user.id,
         params=params,
+        lang=parse_accept_language(accept_language),
     )
 
 
-@router.post("", response_model=LearningLanguagesListOut)
+@router.post('', response_model=LearningLanguagesListOut)
 async def learning_languages_create(
     payload: list[LearningLanguageCreateIn],
     page: int = Query(1, ge=1),
@@ -64,6 +67,7 @@ async def learning_languages_create(
     search: str | None = Query(None),
     session: AsyncSession = Depends(get_async_session),
     request_user=Depends(current_user),
+    accept_language: str | None = Header(None),
 ):
     params = build_languages_list_params(
         page=page, limit=limit, ordering=ordering, search=search
@@ -73,33 +77,38 @@ async def learning_languages_create(
         user_id=request_user.id,
         payload=payload,
         params=params,
+        lang=parse_accept_language(accept_language),
     )
 
 
-@router.get("/all", response_model=LanguagesListOut)
+@router.get('/all', response_model=LanguagesListOut)
 async def all_languages(
     session: AsyncSession = Depends(get_async_session),
     request_user=Depends(current_user),
+    accept_language: str | None = Header(None),
 ):
     return await all_languages_service(
         session=session,
         user_id=request_user.id,
+        lang=parse_accept_language(accept_language),
     )
 
 
-@router.get("/native", response_model=LanguagesListOut)
+@router.get('/native', response_model=LanguagesListOut)
 async def native_languages(
     session: AsyncSession = Depends(get_async_session),
     request_user=Depends(current_user),
+    accept_language: str | None = Header(None),
 ):
     return await native_languages_service(
         session=session,
         user_id=request_user.id,
+        lang=parse_accept_language(accept_language),
     )
 
 
 @router.get(
-    "/learning-available", response_model=LanguagesListOut, tags=["global_languages"]
+    '/learning-available', response_model=LanguagesListOut, tags=['global_languages']
 )
 async def learning_available_languages(
     page: int = Query(1, ge=1),
@@ -112,7 +121,7 @@ async def learning_available_languages(
     params = build_languages_list_params(
         page=page, limit=limit, ordering=ordering, search=search
     )
-    request_user_id = getattr(request_user, "id", None)
+    request_user_id = getattr(request_user, 'id', None)
     return await learning_available_service(
         session=session,
         user_id=request_user_id,
@@ -121,7 +130,11 @@ async def learning_available_languages(
 
 
 @router.get(
-    "/global-languages", response_model=LanguagesListOut, tags=["global_languages"]
+    '/global-languages',
+    response_model=LanguagesListOut,
+    tags=['global_languages'],
+    # Cache for 5 minutes since languages change infrequently
+    response_model_exclude_none=True,
 )
 async def global_languages(
     page: int = Query(1, ge=1),
@@ -140,9 +153,9 @@ async def global_languages(
 
 
 @router.get(
-    "/global-languages/interface",
+    '/global-languages/interface',
     response_model=LanguagesListOut,
-    tags=["global_languages"],
+    tags=['global_languages'],
 )
 async def interface_languages(
     page: int = Query(1, ge=1),
@@ -160,7 +173,7 @@ async def interface_languages(
     )
 
 
-@router.get("/{isocode}", response_model=LearningLanguageOut)
+@router.get('/{isocode}', response_model=LearningLanguageOut)
 async def learning_language_detail(
     isocode: str,
     session: AsyncSession = Depends(get_async_session),
@@ -173,7 +186,7 @@ async def learning_language_detail(
     )
 
 
-@router.delete("/{isocode}", response_model=LearningLanguagesListOut)
+@router.delete('/{isocode}', response_model=LearningLanguagesListOut)
 async def learning_language_delete(
     isocode: str,
     delete_words: bool = Query(False),
@@ -196,7 +209,7 @@ async def learning_language_delete(
     )
 
 
-@router.get("/{isocode}/collections", response_model=CollectionsByLanguageOut)
+@router.get('/{isocode}/collections', response_model=CollectionsByLanguageOut)
 async def learning_language_collections(
     isocode: str,
     session: AsyncSession = Depends(get_async_session),
@@ -209,7 +222,7 @@ async def learning_language_collections(
     )
 
 
-@router.get("/{isocode}/cover-choices", response_model=list[LanguageCoverOut])
+@router.get('/{isocode}/cover-choices', response_model=list[LanguageCoverOut])
 async def cover_choices(
     isocode: str,
     page: int = Query(1, ge=1),
@@ -218,6 +231,7 @@ async def cover_choices(
     search: str | None = Query(None),
     session: AsyncSession = Depends(get_async_session),
     request_user=Depends(current_user),
+    accept_language: str | None = Header(None),
 ):
     params = build_languages_list_params(
         page=page, limit=limit, ordering=ordering, search=search
@@ -227,15 +241,17 @@ async def cover_choices(
         user_id=request_user.id,
         isocode=isocode,
         params=params,
+        lang=parse_accept_language(accept_language),
     )
 
 
-@router.post("/{isocode}/set-cover", response_model=LearningLanguageOut)
+@router.post('/{isocode}/set-cover', response_model=LearningLanguageOut)
 async def set_cover(
     isocode: str,
     payload: CoverSetIn,
     session: AsyncSession = Depends(get_async_session),
     request_user=Depends(current_user),
+    accept_language: str | None = Header(None),
 ):
     return await set_cover_service(
         session=session,
@@ -243,19 +259,22 @@ async def set_cover(
         isocode=isocode,
         cover_id=payload.cover_id,
         image_url=payload.image_url,
+        lang=parse_accept_language(accept_language),
     )
 
 
-@router.post("/{isocode}/delete-cover", response_model=LearningLanguageOut)
+@router.post('/{isocode}/delete-cover', response_model=LearningLanguageOut)
 async def delete_cover(
     isocode: str,
     payload: CoverDeleteIn,
     session: AsyncSession = Depends(get_async_session),
     request_user=Depends(current_user),
+    accept_language: str | None = Header(None),
 ):
     return await delete_cover_service(
         session=session,
         user_id=request_user.id,
         isocode=isocode,
         cover_id=payload.cover_id,
+        lang=parse_accept_language(accept_language),
     )

@@ -25,6 +25,14 @@ from uuid import UUID
 
 from api.v1.utils.searching import apply_search
 from api.v1.utils.ordering import apply_ordering
+from api.v1.published.services import (
+    published_words_list_service,
+    published_collections_list_service,
+)
+from api.v1.vocabulary.params import (
+    build_words_list_params,
+    build_collections_list_params,
+)
 from core.celery.app import celery_app
 from tasks.constants import (
     CLEAR_USER_SUBSCRIPTION_INFO,
@@ -63,24 +71,24 @@ async def _build_paginated_response(
     models: dict,
 ) -> PageOut:
     """Общий пайплайн: search -> filters -> ordering -> pagination -> mapping."""
-    User = models["User"]
-    City = models["City"]
-    Interest = models["Interest"]
-    Language = models["Language"]
-    UserLearningLanguage = models["UserLearningLanguage"]
-    Subscription = models["Subscription"]
-    users_user_interests = models["users_user_interests"]
+    User = models['User']
+    City = models['City']
+    Interest = models['Interest']
+    Language = models['Language']
+    UserLearningLanguage = models['UserLearningLanguage']
+    Subscription = models['Subscription']
+    users_user_interests = models['users_user_interests']
 
     # search
     search_fields = [
-        "username",
-        "first_name",
-        "profile_description",
-        "cities.name",
-        "interests.name",
+        'username',
+        'first_name',
+        'profile_description',
+        'cities.name',
+        'interests.name',
     ]
     base_stmt = apply_search(
-        base_stmt, User, params.search, search_fields, splitter="."
+        base_stmt, User, params.search, search_fields, splitter='.'
     )
 
     # domain filters
@@ -167,19 +175,19 @@ async def _build_paginated_response(
         interests_overlap_percent_expr = literal(0.0)
 
     ordering_map = {
-        "learning_languages_overlap_percent": learning_languages_overlap_percent_expr,
-        "interests_overlap_percent": interests_overlap_percent_expr,
-        "subscribers_count": subscribers_count_expr,
-        "last_login": User.last_login,
-        "created": User.created,
-        "username": User.username,
+        'learning_languages_overlap_percent': learning_languages_overlap_percent_expr,
+        'interests_overlap_percent': interests_overlap_percent_expr,
+        'subscribers_count': subscribers_count_expr,
+        'last_login': User.last_login,
+        'created': User.created,
+        'username': User.username,
     }
 
     base_stmt = apply_ordering(
         base_stmt,
         params.ordering,
         ordering_map,
-        default="-learning_languages_overlap_percent",
+        default='-learning_languages_overlap_percent',
     )
     base_stmt = base_stmt.offset(params.offset).limit(params.limit)
 
@@ -203,8 +211,8 @@ async def users_list_service(
 ) -> PageOut:
     """Service для GET /users."""
     base = build_users_list_base_stmt(
-        User=models["User"],
-        UserSettings=models["UserSettings"],
+        User=models['User'],
+        UserSettings=models['UserSettings'],
         params=params,
     )
     return await _build_paginated_response(
@@ -214,6 +222,56 @@ async def users_list_service(
         request_user_id=request_user_id,
         models=models,
     )
+
+
+async def user_profile_words_service(
+    *,
+    session: AsyncSession,
+    request_user_id: UUID | None,
+    target_user_id: UUID,
+    page: int,
+    limit: int,
+) -> PageOut:
+    params = build_words_list_params(
+        page=page,
+        limit=limit,
+        ordering=None,
+        search=None,
+        languages=None,
+        tags=None,
+        types=None,
+    )
+    params, total, results = await published_words_list_service(
+        session=session,
+        user_id=request_user_id,
+        params=params,
+        author_ids=[target_user_id],
+    )
+    return PageOut(page=params.page, limit=params.limit, count=total, results=results)
+
+
+async def user_profile_collections_service(
+    *,
+    session: AsyncSession,
+    request_user_id: UUID | None,
+    target_user_id: UUID,
+    page: int,
+    limit: int,
+) -> PageOut:
+    params = build_collections_list_params(
+        page=page,
+        limit=limit,
+        ordering=None,
+        search=None,
+        tags=None,
+    )
+    params, total, results = await published_collections_list_service(
+        session=session,
+        user_id=request_user_id,
+        params=params,
+        author_ids=[target_user_id],
+    )
+    return PageOut(page=params.page, limit=params.limit, count=total, results=results)
 
 
 async def users_retrieve_service(
@@ -231,25 +289,25 @@ async def users_retrieve_service(
     stmt = build_user_profile_stmt(
         slug=slug,
         request_user_id=request_user_id,
-        User=models["User"],
-        UserSettings=models["UserSettings"],
-        City=models["City"],
-        Interest=models["Interest"],
-        Language=models["Language"],
-        UserLearningLanguage=models["UserLearningLanguage"],
-        UserNativeLanguage=models["UserNativeLanguage"],
-        Subscription=models["Subscription"],
-        users_user_cities=models["users_user_cities"],
-        users_user_interests=models["users_user_interests"],
+        User=models['User'],
+        UserSettings=models['UserSettings'],
+        City=models['City'],
+        Interest=models['Interest'],
+        Language=models['Language'],
+        UserLearningLanguage=models['UserLearningLanguage'],
+        UserNativeLanguage=models['UserNativeLanguage'],
+        Subscription=models['Subscription'],
+        users_user_cities=models['users_user_cities'],
+        users_user_interests=models['users_user_interests'],
     )
 
     row = (await session.execute(stmt)).mappings().first()
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail='User not found')
 
     celery_app.send_task(
         CLEAR_USER_SUBSCRIPTION_INFO,
-        args=[str(row["id"])],
+        args=[str(row['id'])],
     )
 
     return map_user_profile_row(dict(row))
@@ -261,14 +319,14 @@ async def users_retrieve_service(
 
 
 async def _get_user_by_slug(session: AsyncSession, slug: str, *, models: dict):
-    User = models["User"]
-    UserSettings = models["UserSettings"]
+    User = models['User']
+    UserSettings = models['UserSettings']
     stmt = (
         select(
             User.id,
             User.slug,
             func.coalesce(UserSettings.allow_subscriptions, literal(True)).label(
-                "allow_subscriptions"
+                'allow_subscriptions'
             ),
         )
         .select_from(User)
@@ -286,19 +344,19 @@ async def subscribe_toggle_service(
     models: dict = USER_MODELS,
 ) -> SubscriptionToggleOut:
     """Subscribe/unsubscribe current user to another user."""
-    Subscription = models["Subscription"]
+    Subscription = models['Subscription']
 
     target = await _get_user_by_slug(session, target_slug, models=models)
     if not target:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail='User not found')
 
-    target_id = target["id"]
+    target_id = target['id']
     if target_id == actor_id:
-        raise HTTPException(status_code=400, detail="Cannot subscribe to yourself")
+        raise HTTPException(status_code=400, detail='Cannot subscribe to yourself')
 
-    if not target["allow_subscriptions"]:
+    if not target['allow_subscriptions']:
         raise HTTPException(
-            status_code=403, detail="Subscriptions are disabled for this user"
+            status_code=403, detail='Subscriptions are disabled for this user'
         )
 
     existing = (
@@ -324,7 +382,7 @@ async def subscribe_toggle_service(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="Already subscribed") from exc
+        raise HTTPException(status_code=409, detail='Already subscribed') from exc
 
     return SubscriptionToggleOut(is_subscribed=True)
 
@@ -342,13 +400,13 @@ async def enable_notifications_service(
     models: dict = USER_MODELS,
 ) -> EnableNotificationsOut:
     """Turn notifications on/off for a subscription."""
-    Subscription = models["Subscription"]
+    Subscription = models['Subscription']
 
     target = await _get_user_by_slug(session, target_slug, models=models)
     if not target:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail='User not found')
 
-    target_id = target["id"]
+    target_id = target['id']
     subscription = (
         await session.execute(
             select(Subscription).where(
@@ -359,7 +417,7 @@ async def enable_notifications_service(
     ).scalar_one_or_none()
     if not subscription:
         raise HTTPException(
-            status_code=409, detail="You are not subscribed to this user"
+            status_code=409, detail='You are not subscribed to this user'
         )
 
     subscription.enable_notifications = enable
@@ -375,11 +433,11 @@ async def subscriptions_list_service(
     models: dict = USER_MODELS,
 ) -> PageOut:
     """List authors current user is subscribed to."""
-    User = models["User"]
-    Subscription = models["Subscription"]
+    User = models['User']
+    Subscription = models['Subscription']
     base = build_users_list_base_stmt(
         User=User,
-        UserSettings=models["UserSettings"],
+        UserSettings=models['UserSettings'],
         params=params,
     ).where(
         User.id.in_(
@@ -405,12 +463,12 @@ async def friends_list_service(
     models: dict = USER_MODELS,
 ) -> PageOut:
     """Friends: пользователи, у которых есть связь в users_friend."""
-    User = models["User"]
-    Friend = models["Friend"]
+    User = models['User']
+    Friend = models['Friend']
 
     base = build_users_list_base_stmt(
         User=User,
-        UserSettings=models["UserSettings"],
+        UserSettings=models['UserSettings'],
         params=params,
     ).where(
         exists().where(
@@ -438,12 +496,12 @@ async def friend_requests_list_service(
     models: dict = USER_MODELS,
 ) -> PageOut:
     """Friend requests sent TO current user."""
-    User = models["User"]
-    FriendRequest = models["FriendRequest"]
+    User = models['User']
+    FriendRequest = models['FriendRequest']
 
     base = build_users_list_base_stmt(
         User=User,
-        UserSettings=models["UserSettings"],
+        UserSettings=models['UserSettings'],
         params=params,
     ).where(
         exists().where(
@@ -473,15 +531,15 @@ async def friend_request_response_service(
     models: dict = USER_MODELS,
 ) -> PageOut:
     """Accept or decline a friend request."""
-    User = models["User"]
-    Friend = models["Friend"]
-    FriendRequest = models["FriendRequest"]
+    User = models['User']
+    Friend = models['Friend']
+    FriendRequest = models['FriendRequest']
 
     target_row = (
         await session.execute(select(User.id).where(User.username == username))
     ).scalar_one_or_none()
     if not target_row:
-        raise HTTPException(status_code=404, detail="Request not found")
+        raise HTTPException(status_code=404, detail='Request not found')
 
     target_id = target_row
 
@@ -495,7 +553,7 @@ async def friend_request_response_service(
     ).scalar_one_or_none()
 
     if not incoming_request:
-        raise HTTPException(status_code=404, detail="Request not found")
+        raise HTTPException(status_code=404, detail='Request not found')
 
     await session.execute(
         delete(FriendRequest).where(FriendRequest.id == incoming_request)
@@ -528,16 +586,16 @@ async def add_to_friends_service(
     models: dict = USER_MODELS,
 ) -> FriendRequestSentOut:
     """Send friend request => подписка в одну сторону."""
-    Friend = models["Friend"]
-    FriendRequest = models["FriendRequest"]
+    Friend = models['Friend']
+    FriendRequest = models['FriendRequest']
 
     target = await _get_user_by_slug(session, target_slug, models=models)
     if not target:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail='User not found')
 
-    target_id = target["id"]
+    target_id = target['id']
     if target_id == request_user_id:
-        raise HTTPException(status_code=400, detail="Cannot add yourself")
+        raise HTTPException(status_code=400, detail='Cannot add yourself')
 
     a, b = _ordered_pair(request_user_id, target_id)
     already_friends = (
@@ -551,7 +609,7 @@ async def add_to_friends_service(
         )
     ).scalar_one_or_none()
     if already_friends:
-        raise HTTPException(status_code=409, detail="Already friends")
+        raise HTTPException(status_code=409, detail='Already friends')
 
     incoming = (
         await session.execute(
@@ -591,13 +649,13 @@ async def remove_from_friends_service(
     models: dict = USER_MODELS,
 ) -> IsFriendOut:
     """Remove friend (drop relation)."""
-    Friend = models["Friend"]
+    Friend = models['Friend']
 
     target = await _get_user_by_slug(session, target_slug, models=models)
     if not target:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail='User not found')
 
-    target_id = target["id"]
+    target_id = target['id']
     a, b = _ordered_pair(request_user_id, target_id)
     await session.execute(
         delete(Friend).where(
@@ -619,8 +677,8 @@ async def buddies_list_service(
     models: dict = USER_MODELS,
 ) -> PageOut:
     """Users with allow_buddy_search enabled."""
-    User = models["User"]
-    UserSettings = models["UserSettings"]
+    User = models['User']
+    UserSettings = models['UserSettings']
 
     base = build_users_list_base_stmt(
         User=User,
@@ -648,10 +706,10 @@ async def teachers_list_service(
     models: dict = USER_MODELS,
 ) -> PageOut:
     """Users with is_teacher flag."""
-    User = models["User"]
+    User = models['User']
     base = build_users_list_base_stmt(
         User=User,
-        UserSettings=models["UserSettings"],
+        UserSettings=models['UserSettings'],
         params=params,
     ).where(User.is_teacher.is_(True))
 

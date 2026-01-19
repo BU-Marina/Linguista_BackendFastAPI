@@ -88,7 +88,9 @@ async def notification_mark_seen_service(
     session: AsyncSession,
     user_id: UUID,
     notification_id: UUID,
-) -> None:
+    page: int,
+    limit: int,
+) -> NotificationsPageOut:
     Notification = NOTIFICATION_MODELS['Notification']
     obj = (
         await session.execute(
@@ -99,5 +101,28 @@ async def notification_mark_seen_service(
     ).scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=404, detail='Notification not found')
-    obj.is_seen = True
+    if obj.notification_type in NotificationTypesEnum.system_notification_types:
+        await session.delete(obj)
+    elif not obj.is_seen:
+        obj.is_seen = True
     await session.commit()
+    return await notifications_list_service(
+        session=session, user_id=user_id, page=page, limit=limit
+    )
+
+
+async def notifications_clear_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    page: int,
+    limit: int,
+) -> NotificationsPageOut:
+    Notification = NOTIFICATION_MODELS['Notification']
+    await session.execute(
+        Notification.__table__.delete().where(Notification.recipient_id == user_id)
+    )
+    await session.commit()
+    return await notifications_list_service(
+        session=session, user_id=user_id, page=page, limit=limit
+    )

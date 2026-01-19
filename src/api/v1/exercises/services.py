@@ -11,10 +11,13 @@ from sqlalchemy.orm import selectinload
 
 from api.v1.utils.searching import apply_search
 from api.v1.utils.pagination import normalize_pagination
+from api.v1.vocabulary.mapping import map_word
+from api.v1.collections.mapping import map_collection
 from api.v1.vocabulary.models import VOCAB_MODELS
+from api.v1.languages.models import LANGUAGE_MODELS
 from core.celery.app import celery_app
 from tasks.constants import DELETE_PREVIOUS_EX_CONF
-
+from core.utils.i18n import i18n_get
 from .models import EXERCISE_MODELS
 from .schemas import (
     ExerciseListOut,
@@ -24,11 +27,25 @@ from .schemas import (
     WordsSetIn,
     WordsSetOut,
     PageOut,
+    ExerciseDetailOut as ExerciseDetailSchema,
 )
+from apps.exercises.constants import exercises_lookups
+
+
+def _exercise_name(ex, lang: str) -> str:
+    return i18n_get(ex, 'name', lang)
+
+
+def _exercise_description(ex, lang: str) -> str | None:
+    return i18n_get(ex, 'description', lang)
+
+
+def _exercise_constraint_description(ex, lang: str) -> str | None:
+    return i18n_get(ex, 'constraint_description', lang)
 
 
 async def exercises_list_service(
-    session: AsyncSession, user_id: UUID | None
+    session: AsyncSession, user_id: UUID | None, lang: str
 ) -> ExerciseListOut:
     Exercise = EXERCISE_MODELS['Exercise']
     FavoriteExercise = EXERCISE_MODELS['FavoriteExercise']
@@ -59,7 +76,9 @@ async def exercises_list_service(
         data = ExerciseDetailOut(
             id=ex.id,
             slug=ex.slug,
-            name=ex.name,
+            name=_exercise_name(ex, lang),
+            description=_exercise_description(ex, lang),
+            constraint_description=_exercise_constraint_description(ex, lang),
             icon=ex.icon,
             available=ex.available,
             favorite=ex.favorite,
@@ -75,8 +94,54 @@ async def exercises_list_service(
     return ExerciseListOut(available=available, unavailable=unavailable)
 
 
+async def exercises_favorites_list_service(
+    session: AsyncSession, user_id: UUID, lang: str
+) -> PageOut:
+    Exercise = EXERCISE_MODELS['Exercise']
+    FavoriteExercise = EXERCISE_MODELS['FavoriteExercise']
+
+    fav_ids = (
+        (
+            await session.execute(
+                select(FavoriteExercise.exercise_id).where(
+                    FavoriteExercise.user_id == user_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not fav_ids:
+        return PageOut(page=1, limit=32, count=0, results=[])
+
+    stmt = (
+        select(Exercise)
+        .where(Exercise.id.in_(fav_ids))
+        .options(selectinload(Exercise.hints_available))
+        .order_by(Exercise.created.desc())
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    results = [
+        ExerciseDetailSchema(
+            id=ex.id,
+            slug=ex.slug,
+            name=_exercise_name(ex, lang),
+            description=_exercise_description(ex, lang),
+            constraint_description=_exercise_constraint_description(ex, lang),
+            icon=ex.icon,
+            available=ex.available,
+            favorite=True,
+            hints_available=[h.id for h in ex.hints_available],
+            created=ex.created,
+            modified=ex.modified,
+        )
+        for ex in rows
+    ]
+    return PageOut(page=1, limit=len(results) or 1, count=len(results), results=results)
+
+
 async def exercise_detail_service(
-    session: AsyncSession, slug: str, user_id: UUID | None
+    session: AsyncSession, slug: str, user_id: UUID | None, lang: str
 ) -> ExerciseDetailOut:
     Exercise = EXERCISE_MODELS['Exercise']
     FavoriteExercise = EXERCISE_MODELS['FavoriteExercise']
@@ -105,7 +170,9 @@ async def exercise_detail_service(
     return ExerciseDetailOut(
         id=ex.id,
         slug=ex.slug,
-        name=ex.name,
+        name=_exercise_name(ex, lang),
+        description=_exercise_description(ex, lang),
+        constraint_description=_exercise_constraint_description(ex, lang),
         icon=ex.icon,
         available=ex.available,
         favorite=ex.favorite,
@@ -116,7 +183,7 @@ async def exercise_detail_service(
 
 
 async def exercise_favorite_toggle_service(
-    session: AsyncSession, slug: str, user_id: UUID
+    session: AsyncSession, slug: str, user_id: UUID, lang: str
 ) -> ExerciseDetailOut:
     Exercise = EXERCISE_MODELS['Exercise']
     FavoriteExercise = EXERCISE_MODELS['FavoriteExercise']
@@ -148,7 +215,7 @@ async def exercise_favorite_toggle_service(
         ex.favorite = True
 
     await session.commit()
-    return await exercise_detail_service(session, slug, user_id)
+    return await exercise_detail_service(session, slug, user_id, lang)
 
 
 async def exercise_configuration_get_service(
@@ -167,6 +234,7 @@ async def exercise_configuration_get_service(
         (
             await session.execute(
                 select(ExerciseConfiguration)
+                .options(selectinload(ExerciseConfiguration.exercise))
                 .where(
                     ExerciseConfiguration.author_id == user_id,
                     ExerciseConfiguration.exercise_id == ex.id,
@@ -183,8 +251,14 @@ async def exercise_configuration_get_service(
     return ExerciseConfigurationOut(
         id=cfg.id,
         exercise_id=cfg.exercise_id,
+        exercise_slug=getattr(cfg.exercise, 'slug', None),
         author_id=cfg.author_id,
+        input_mode=getattr(cfg, 'input_mode', None),
         answer_time_limit=cfg.answer_time_limit,
+        time_limit_mode=getattr(cfg, 'time_limit_mode', None),
+        repetitions_amount=getattr(cfg, 'repetitions_amount', None),
+        translations_mode=getattr(cfg, 'translations_mode', None),
+        definitions_mode=getattr(cfg, 'definitions_mode', None),
         hints_use_amount=cfg.hints_use_amount,
         is_default=cfg.is_default,
         words=[w.id for w in cfg.words],
@@ -289,14 +363,395 @@ async def exercise_configuration_create_service(
     return ExerciseConfigurationOut(
         id=cfg.id,
         exercise_id=cfg.exercise_id,
+        exercise_slug=getattr(ex, 'slug', None),
         author_id=cfg.author_id,
+        input_mode=getattr(cfg, 'input_mode', None),
         answer_time_limit=cfg.answer_time_limit,
+        time_limit_mode=getattr(cfg, 'time_limit_mode', None),
+        repetitions_amount=getattr(cfg, 'repetitions_amount', None),
+        translations_mode=getattr(cfg, 'translations_mode', None),
+        definitions_mode=getattr(cfg, 'definitions_mode', None),
         hints_use_amount=cfg.hints_use_amount,
         is_default=cfg.is_default,
         words=[w.id for w in cfg.words],
         words_set=[ws.id for ws in cfg.words_set],
         hints_available=[h.id for h in cfg.hints_available],
     )
+
+
+async def exercise_configuration_detail_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    config_id: UUID,
+    models: dict = EXERCISE_MODELS,
+) -> ExerciseConfigurationOut:
+    ExerciseConfiguration = models['ExerciseConfiguration']
+    cfg = (
+        await session.execute(
+            select(ExerciseConfiguration)
+            .options(
+                selectinload(ExerciseConfiguration.words),
+                selectinload(ExerciseConfiguration.words_set),
+                selectinload(ExerciseConfiguration.hints_available),
+                selectinload(ExerciseConfiguration.exercise),
+            )
+            .where(
+                ExerciseConfiguration.id == config_id,
+                ExerciseConfiguration.author_id == user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not cfg:
+        raise HTTPException(status_code=404, detail='Configuration not found')
+
+    return ExerciseConfigurationOut(
+        id=cfg.id,
+        exercise_id=cfg.exercise_id,
+        exercise_slug=getattr(cfg.exercise, 'slug', None),
+        author_id=cfg.author_id,
+        input_mode=getattr(cfg, 'input_mode', None),
+        answer_time_limit=cfg.answer_time_limit,
+        time_limit_mode=getattr(cfg, 'time_limit_mode', None),
+        repetitions_amount=getattr(cfg, 'repetitions_amount', None),
+        translations_mode=getattr(cfg, 'translations_mode', None),
+        definitions_mode=getattr(cfg, 'definitions_mode', None),
+        hints_use_amount=cfg.hints_use_amount,
+        is_default=cfg.is_default,
+        words=[w.id for w in cfg.words],
+        words_set=[ws.id for ws in cfg.words_set],
+        hints_available=[h.id for h in cfg.hints_available],
+    )
+
+
+async def exercise_configuration_words_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    config_id: UUID,
+    page: int = 1,
+    limit: int = 32,
+    models: dict = EXERCISE_MODELS,
+    vocab_models: dict = VOCAB_MODELS,
+) -> PageOut:
+    ExerciseConfiguration = models['ExerciseConfiguration']
+    Word = vocab_models['Word']
+
+    cfg = (
+        await session.execute(
+            select(ExerciseConfiguration.id).where(
+                ExerciseConfiguration.id == config_id,
+                ExerciseConfiguration.author_id == user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not cfg:
+        raise HTTPException(status_code=404, detail='Configuration not found')
+
+    page, limit, offset = normalize_pagination(page, limit)
+    association = ExerciseConfiguration.words.property.secondary
+
+    stmt = (
+        select(Word)
+        .join(association, association.c.word_id == Word.id)
+        .where(association.c.exerciseconfiguration_id == config_id)
+        .order_by(Word.created.desc())
+    )
+
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+    rows = (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
+    results = [map_word(w) for w in rows]
+    return PageOut(page=page, limit=limit, count=total, results=results)
+
+
+async def random_exercise_configuration_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    slug: str,
+    words_limit: int | None = None,
+    models: dict = EXERCISE_MODELS,
+    vocab_models: dict = VOCAB_MODELS,
+    lang_models: dict = LANGUAGE_MODELS,
+) -> ExerciseConfigurationOut:
+    Exercise = models['Exercise']
+    ExerciseConfiguration = models['ExerciseConfiguration']
+
+    ex = (
+        (
+            await session.execute(
+                select(Exercise)
+                .where(Exercise.available.is_(True))
+                .order_by(func.random())
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if not ex:
+        raise HTTPException(status_code=404, detail='No exercises available')
+
+    limit = words_limit or 32
+    available_page = await exercise_available_words_service(
+        session=session,
+        user_id=user_id,
+        slug=ex.slug,
+        page=1,
+        limit=limit,
+        models=models,
+        vocab_models=vocab_models,
+        lang_models=lang_models,
+        random_order=True,
+    )
+    word_ids = [w.id for w in available_page.results]
+
+    cfg = ExerciseConfiguration(
+        author_id=user_id,
+        exercise_id=ex.id,
+        is_default=False,
+    )
+    if word_ids:
+        Word = vocab_models['Word']
+        words = (
+            (await session.execute(select(Word).where(Word.id.in_(word_ids))))
+            .scalars()
+            .all()
+        )
+        cfg.words.extend(words)
+
+    # attach hints (all available)
+    if getattr(ex, 'hints_available', None):
+        cfg.hints_available.extend(ex.hints_available)
+
+    session.add(cfg)
+    await session.commit()
+    await session.refresh(cfg)
+
+    return ExerciseConfigurationOut(
+        id=cfg.id,
+        exercise_id=cfg.exercise_id,
+        exercise_slug=getattr(ex, 'slug', None),
+        author_id=cfg.author_id,
+        input_mode=getattr(cfg, 'input_mode', None),
+        answer_time_limit=cfg.answer_time_limit,
+        time_limit_mode=getattr(cfg, 'time_limit_mode', None),
+        repetitions_amount=getattr(cfg, 'repetitions_amount', None),
+        translations_mode=getattr(cfg, 'translations_mode', None),
+        definitions_mode=getattr(cfg, 'definitions_mode', None),
+        hints_use_amount=cfg.hints_use_amount,
+        is_default=cfg.is_default,
+        words=[w.id for w in cfg.words],
+        words_set=[ws.id for ws in cfg.words_set],
+        hints_available=[h.id for h in cfg.hints_available],
+    )
+
+
+# ------------------------------
+# Available words/collections
+# ------------------------------
+
+
+# ------------------------------
+# Available words/collections
+# ------------------------------
+
+
+def _base_words_query(models):
+    Word = models['Word']
+    return select(Word).options(
+        selectinload(Word.tags),
+        selectinload(Word.types),
+        selectinload(Word.translations),
+        selectinload(Word.language),
+    )
+
+
+async def exercise_available_words_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    slug: str,
+    page: int = 1,
+    limit: int = 32,
+    models: dict = EXERCISE_MODELS,
+    vocab_models: dict = VOCAB_MODELS,
+    lang_models: dict = LANGUAGE_MODELS,
+    random_order: bool = False,
+) -> PageOut:
+    Exercise = models['Exercise']
+    Word = vocab_models['Word']
+    WordTranslations = vocab_models['WordTranslations']
+    WordTranslation = vocab_models['WordTranslation']
+    WordDefinitions = vocab_models['WordDefinitions']
+    WordImageAssociations = vocab_models['WordImageAssociations']
+    UserNativeLanguage = lang_models['UserNativeLanguage']
+
+    ex = (
+        await session.execute(select(Exercise).where(Exercise.slug == slug))
+    ).scalar_one_or_none()
+    if not ex:
+        raise HTTPException(status_code=404, detail='Exercise not found')
+
+    page, limit, offset = normalize_pagination(page, limit)
+
+    stmt = _base_words_query(vocab_models).where(Word.author_id == user_id)
+
+    match ex.slug:
+        case exercises_lookups.TRANSLATOR_EXERCISE_SLUG:
+            native_lang_ids = select(UserNativeLanguage.language_id).where(
+                UserNativeLanguage.user_id == user_id
+            )
+            stmt = (
+                stmt.join(WordTranslations, WordTranslations.word_id == Word.id)
+                .join(
+                    WordTranslation,
+                    WordTranslation.id == WordTranslations.translation_id,
+                )
+                .where(WordTranslation.language_id.in_(native_lang_ids))
+            )
+        case exercises_lookups.ASSOCIATE_EXERCISE_SLUG:
+            stmt = stmt.join(
+                WordImageAssociations, WordImageAssociations.word_id == Word.id
+            )
+        case exercises_lookups.WITH_LETTER_EXERCISE_SLUG:
+            stmt = stmt.where(func.length(Word.text) > 1)
+        case exercises_lookups.DEFINITIONS_TIME_EXERCISE_SLUG:
+            stmt = stmt.join(WordDefinitions, WordDefinitions.word_id == Word.id)
+        case _:
+            # If exercise not recognized, return empty page
+            return PageOut(page=page, limit=limit, count=0, results=[])
+
+    if random_order:
+        stmt = stmt.order_by(func.random())
+    else:
+        stmt = stmt.order_by(Word.created.desc())
+    stmt = stmt.distinct()
+
+
+async def exercise_last_approach_incorrects_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    slug: str,
+    models: dict = EXERCISE_MODELS,
+) -> list:
+    # Placeholder: no history implemented yet
+    return []
+
+
+async def exercise_last_approach_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    slug: str,
+    models: dict = EXERCISE_MODELS,
+) -> dict:
+    # Placeholder: no history implemented yet
+    return {}
+
+
+async def exercise_shared_session_results_service(
+    *,
+    session: AsyncSession,
+    share_key: str,
+    models: dict = EXERCISE_MODELS,
+) -> dict:
+    # Placeholder
+    return {}
+
+
+async def exercise_update_share_link_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    slug: str,
+    models: dict = EXERCISE_MODELS,
+) -> dict:
+    return {'share_link': None}
+
+
+async def exercise_remove_share_link_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    slug: str,
+    models: dict = EXERCISE_MODELS,
+) -> dict:
+    return {'status': 'ok'}
+
+
+async def exercise_available_collections_service(
+    *,
+    session: AsyncSession,
+    user_id: UUID,
+    slug: str,
+    page: int = 1,
+    limit: int = 32,
+    models: dict = EXERCISE_MODELS,
+    vocab_models: dict = VOCAB_MODELS,
+    lang_models: dict = LANGUAGE_MODELS,
+) -> PageOut:
+    Exercise = models['Exercise']
+    Collection = vocab_models['Collection']
+    Word = vocab_models['Word']
+    WordsInCollections = vocab_models['WordsInCollections']
+    WordTranslations = vocab_models['WordTranslations']
+    WordTranslation = vocab_models['WordTranslation']
+    WordDefinitions = vocab_models['WordDefinitions']
+    WordImageAssociations = vocab_models['WordImageAssociations']
+    UserNativeLanguage = lang_models['UserNativeLanguage']
+
+    ex = (
+        await session.execute(select(Exercise).where(Exercise.slug == slug))
+    ).scalar_one_or_none()
+    if not ex:
+        raise HTTPException(status_code=404, detail='Exercise not found')
+
+    page, limit, offset = normalize_pagination(page, limit)
+
+    stmt = select(Collection).where(Collection.author_id == user_id)
+
+    # Join words via WordsInCollections to ensure collections have eligible words
+    stmt = stmt.join(
+        WordsInCollections, WordsInCollections.collection_id == Collection.id
+    )
+    stmt = stmt.join(Word, Word.id == WordsInCollections.word_id)
+
+    match ex.slug:
+        case exercises_lookups.TRANSLATOR_EXERCISE_SLUG:
+            native_lang_ids = select(UserNativeLanguage.language_id).where(
+                UserNativeLanguage.user_id == user_id
+            )
+            stmt = (
+                stmt.join(WordTranslations, WordTranslations.word_id == Word.id)
+                .join(
+                    WordTranslation,
+                    WordTranslation.id == WordTranslations.translation_id,
+                )
+                .where(WordTranslation.language_id.in_(native_lang_ids))
+            )
+        case exercises_lookups.ASSOCIATE_EXERCISE_SLUG:
+            stmt = stmt.join(
+                WordImageAssociations, WordImageAssociations.word_id == Word.id
+            )
+        case exercises_lookups.WITH_LETTER_EXERCISE_SLUG:
+            stmt = stmt.where(func.length(Word.text) > 1)
+        case exercises_lookups.DEFINITIONS_TIME_EXERCISE_SLUG:
+            stmt = stmt.join(WordDefinitions, WordDefinitions.word_id == Word.id)
+        case _:
+            return PageOut(page=page, limit=limit, count=0, results=[])
+
+    stmt = stmt.order_by(Collection.created.desc()).distinct()
+
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+    rows = (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
+
+    results = [map_collection(c, include_words=False) for c in rows]
+    return PageOut(page=page, limit=limit, count=total, results=results)
 
 
 async def words_sets_list_service(

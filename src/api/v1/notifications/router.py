@@ -6,7 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import get_async_session
 from auth.setup import current_user
 from .schemas import NotificationsPageOut
-from .services import notifications_list_service, notification_delete_service
+from .services import (
+    notifications_list_service,
+    notification_delete_service,
+    notification_mark_seen_service,
+    notifications_clear_service,
+)
 
 router = APIRouter(prefix='/notifications', tags=['notifications'])
 
@@ -35,6 +40,38 @@ async def notification_delete(
         session=session,
         user_id=user.id,
         notification_id=notification_id,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.post('/{notification_id}/read', response_model=NotificationsPageOut)
+async def notification_read(
+    notification_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(32, ge=1, le=100),
+    user=Depends(current_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return await notification_mark_seen_service(
+        session=session,
+        user_id=user.id,
+        notification_id=notification_id,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.post('/clear', response_model=NotificationsPageOut)
+async def notifications_clear(
+    page: int = Query(1, ge=1),
+    limit: int = Query(32, ge=1, le=100),
+    user=Depends(current_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return await notifications_clear_service(
+        session=session,
+        user_id=user.id,
         page=page,
         limit=limit,
     )

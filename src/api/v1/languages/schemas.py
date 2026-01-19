@@ -2,12 +2,15 @@
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from core.utils.urls import get_full_media_url
 
 
 class LanguageBase(BaseModel):
     id: str
     isocode: str
+    name: Optional[str] = None
+    country: Optional[str] = None
     name_local: Optional[str] = None
     name_en: Optional[str] = None
     name_ru: Optional[str] = None
@@ -19,12 +22,22 @@ class LanguageBase(BaseModel):
     is_native: Optional[bool] = None
     is_learning: Optional[bool] = None
 
+    @field_validator('flag_icon', mode='before')
+    @classmethod
+    def convert_flag_icon_to_full_url(cls, v):
+        return get_full_media_url(v)
+
 
 class LanguageCoverOut(BaseModel):
     id: str
     image_url: str
     default: bool = False
     is_current_cover: bool = False
+
+    @field_validator('image_url', mode='before')
+    @classmethod
+    def convert_image_url_to_full(cls, v):
+        return get_full_media_url(v) or v
 
 
 class LearningLanguageOut(BaseModel):
@@ -43,14 +56,19 @@ class LearningLanguageOut(BaseModel):
     active_words_count: int = 0
     mastered_words_count: int = 0
 
+    @field_validator('cover_url', mode='before')
+    @classmethod
+    def convert_cover_url_to_full(cls, v):
+        return get_full_media_url(v)
+
 
 class LearningLanguageCreateIn(BaseModel):
-    language_isocode: str = Field(..., alias="language")
+    language_isocode: str = Field(..., alias='language')
     level: Optional[str] = None
     is_taught: bool = False
 
     model_config = {
-        "populate_by_name": True,
+        'populate_by_name': True,
     }
 
 

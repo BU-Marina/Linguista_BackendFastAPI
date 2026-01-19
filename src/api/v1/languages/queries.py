@@ -7,10 +7,10 @@ from sqlalchemy.sql import Select
 def build_learning_languages_base_stmt(
     *, user_id, models, ordering: str | None, isocode: str | None = None
 ) -> Select:
-    Language = models["Language"]
-    LanguageCoverImage = models["LanguageCoverImage"]
-    UserLearningLanguage = models["UserLearningLanguage"]
-    Word = models["Word"]
+    Language = models['Language']
+    LanguageCoverImage = models['LanguageCoverImage']
+    UserLearningLanguage = models['UserLearningLanguage']
+    Word = models['Word']
 
     words_count = (
         select(func.count())
@@ -26,7 +26,7 @@ def build_learning_languages_base_stmt(
         .where(
             Word.author_id == user_id,
             Word.language_id == UserLearningLanguage.language_id,
-            Word.activity_status == "I",
+            Word.activity_status == 'I',
         )
         .correlate(UserLearningLanguage)
         .scalar_subquery()
@@ -36,7 +36,7 @@ def build_learning_languages_base_stmt(
         .where(
             Word.author_id == user_id,
             Word.language_id == UserLearningLanguage.language_id,
-            Word.activity_status == "A",
+            Word.activity_status == 'A',
         )
         .correlate(UserLearningLanguage)
         .scalar_subquery()
@@ -46,7 +46,7 @@ def build_learning_languages_base_stmt(
         .where(
             Word.author_id == user_id,
             Word.language_id == UserLearningLanguage.language_id,
-            Word.activity_status == "M",
+            Word.activity_status == 'M',
         )
         .correlate(UserLearningLanguage)
         .scalar_subquery()
@@ -60,7 +60,7 @@ def build_learning_languages_base_stmt(
             UserLearningLanguage.is_confirmed,
             UserLearningLanguage.is_taught,
             UserLearningLanguage.cover_id,
-            Language.id.label("language_id"),
+            Language.id.label('language_id'),
             Language.isocode,
             Language.name_local,
             Language.name_en,
@@ -69,11 +69,11 @@ def build_learning_languages_base_stmt(
             Language.learning_available,
             Language.interface_available,
             Language.sorting,
-            LanguageCoverImage.image_url.label("cover_url"),
-            words_count.label("words_count"),
-            inactive_words_count.label("inactive_words_count"),
-            active_words_count.label("active_words_count"),
-            mastered_words_count.label("mastered_words_count"),
+            LanguageCoverImage.image_url.label('cover_url'),
+            words_count.label('words_count'),
+            inactive_words_count.label('inactive_words_count'),
+            active_words_count.label('active_words_count'),
+            mastered_words_count.label('mastered_words_count'),
         )
         .select_from(UserLearningLanguage)
         .join(Language, Language.id == UserLearningLanguage.language_id)
@@ -86,14 +86,14 @@ def build_learning_languages_base_stmt(
         stmt = stmt.where(Language.isocode == isocode)
 
     ordering_map = {
-        "-words_count": words_count.desc(),
-        "words_count": words_count,
-        "-created": UserLearningLanguage.created.desc(),
-        "created": UserLearningLanguage.created,
-        "-sorting": Language.sorting.desc(),
-        "sorting": Language.sorting,
-        "-name": Language.name_local.desc(),
-        "name": Language.name_local,
+        '-words_count': words_count.desc(),
+        'words_count': words_count,
+        '-created': UserLearningLanguage.created.desc(),
+        'created': UserLearningLanguage.created,
+        '-sorting': Language.sorting.desc(),
+        'sorting': Language.sorting,
+        '-name': Language.name_local.desc(),
+        'name': Language.name_local,
     }
     if ordering and ordering in ordering_map:
         stmt = stmt.order_by(ordering_map[ordering])
@@ -105,18 +105,18 @@ def build_learning_languages_base_stmt(
 
 
 def build_native_languages_stmt(*, user_id, models) -> Select:
-    Language = models["Language"]
-    UserNativeLanguage = models["UserNativeLanguage"]
+    Language = models['Language']
+    UserNativeLanguage = models['UserNativeLanguage']
     stmt = (
         select(
             UserNativeLanguage.id,
-            Language.id.label("language_id"),
+            Language.id.label('language_id'),
             Language.isocode,
             Language.name_local,
             Language.name_en,
             Language.name_ru,
             Language.flag_icon,
-            literal(True).label("is_native"),
+            literal(True).label('is_native'),
         )
         .select_from(UserNativeLanguage)
         .join(Language, Language.id == UserNativeLanguage.language_id)
@@ -127,10 +127,10 @@ def build_native_languages_stmt(*, user_id, models) -> Select:
 
 
 def build_all_languages_stmt(*, user_id, models) -> Select:
-    Language = models["Language"]
-    UserLearningLanguage = models["UserLearningLanguage"]
-    UserNativeLanguage = models["UserNativeLanguage"]
-    Word = models["Word"]
+    Language = models['Language']
+    UserLearningLanguage = models['UserLearningLanguage']
+    UserNativeLanguage = models['UserNativeLanguage']
+    Word = models['Word']
 
     words_count = (
         select(func.count(distinct(Word.id)))
@@ -159,9 +159,9 @@ def build_all_languages_stmt(*, user_id, models) -> Select:
             Language.learning_available,
             Language.interface_available,
             Language.sorting,
-            words_count.label("words_count"),
-            learning_exists.label("is_learning"),
-            native_exists.label("is_native"),
+            words_count.label('words_count'),
+            learning_exists.label('is_learning'),
+            native_exists.label('is_native'),
         )
         .select_from(Language)
         .order_by(Language.sorting.desc(), Language.name_local)
@@ -171,9 +171,9 @@ def build_all_languages_stmt(*, user_id, models) -> Select:
 def build_learning_available_stmt(
     *, user_id, models, ordering: str | None, search: str | None
 ) -> Select:
-    Language = models["Language"]
-    UserLearningLanguage = models["UserLearningLanguage"]
-    Word = models["Word"]
+    Language = models['Language']
+    UserLearningLanguage = models['UserLearningLanguage']
+    Word = models['Word']
 
     words_count = (
         select(func.count(distinct(Word.id)))
@@ -193,7 +193,7 @@ def build_learning_available_stmt(
             Language.learning_available,
             Language.interface_available,
             Language.sorting,
-            words_count.label("words_count"),
+            words_count.label('words_count'),
         )
         .select_from(Language)
         .where(Language.learning_available.is_(True))
@@ -208,7 +208,7 @@ def build_learning_available_stmt(
         )
 
     if search:
-        pattern = f"%{search}%"
+        pattern = f'%{search}%'
         base = base.where(
             or_(
                 Language.name_local.ilike(pattern),
@@ -217,15 +217,15 @@ def build_learning_available_stmt(
             )
         )
 
-    if ordering == "-words_count":
+    if ordering == '-words_count':
         base = base.order_by(
             words_count.desc(), Language.sorting.desc(), Language.name_local
         )
-    elif ordering == "words_count":
+    elif ordering == 'words_count':
         base = base.order_by(words_count, Language.sorting.desc(), Language.name_local)
-    elif ordering in ("sorting", "-sorting"):
+    elif ordering in ('sorting', '-sorting'):
         base = base.order_by(
-            Language.sorting.desc() if ordering.startswith("-") else Language.sorting,
+            Language.sorting.desc() if ordering.startswith('-') else Language.sorting,
             Language.name_local,
         )
     else:
@@ -235,9 +235,9 @@ def build_learning_available_stmt(
 
 
 def build_cover_choices_stmt(*, user_id, isocode: str, models) -> Select:
-    Language = models["Language"]
-    LanguageCoverImage = models["LanguageCoverImage"]
-    UserLearningLanguage = models["UserLearningLanguage"]
+    Language = models['Language']
+    LanguageCoverImage = models['LanguageCoverImage']
+    UserLearningLanguage = models['UserLearningLanguage']
 
     current_cover_sq = (
         select(UserLearningLanguage.cover_id)
@@ -253,7 +253,7 @@ def build_cover_choices_stmt(*, user_id, isocode: str, models) -> Select:
             LanguageCoverImage.id,
             LanguageCoverImage.image_url,
             LanguageCoverImage.default,
-            (LanguageCoverImage.id == current_cover_sq).label("is_current_cover"),
+            (LanguageCoverImage.id == current_cover_sq).label('is_current_cover'),
         )
         .select_from(LanguageCoverImage)
         .join(Language, Language.id == LanguageCoverImage.language_id)
@@ -267,15 +267,15 @@ def build_cover_choices_stmt(*, user_id, isocode: str, models) -> Select:
 
 
 def build_collections_by_language_stmt(*, user_id, isocode: str, models) -> Select:
-    Collection = models["Collection"]
-    WordsInCollections = models["WordsInCollections"]
-    Word = models["Word"]
-    Language = models["Language"]
+    Collection = models['Collection']
+    WordsInCollections = models['WordsInCollections']
+    Word = models['Word']
+    Language = models['Language']
 
     collections_words_sq = (
         select(
-            WordsInCollections.collection_id.label("collection_id"),
-            func.count(distinct(WordsInCollections.word_id)).label("words_count"),
+            WordsInCollections.collection_id.label('collection_id'),
+            func.count(distinct(WordsInCollections.word_id)).label('words_count'),
         )
         .select_from(WordsInCollections)
         .join(Word, Word.id == WordsInCollections.word_id)
@@ -290,7 +290,7 @@ def build_collections_by_language_stmt(*, user_id, isocode: str, models) -> Sele
             Collection.id,
             Collection.slug,
             Collection.title,
-            func.coalesce(collections_words_sq.c.words_count, 0).label("words_count"),
+            func.coalesce(collections_words_sq.c.words_count, 0).label('words_count'),
         )
         .select_from(Collection)
         .join(
@@ -304,33 +304,42 @@ def build_collections_by_language_stmt(*, user_id, isocode: str, models) -> Sele
 def build_global_languages_stmt(
     *, interface_only: bool, search: str | None, ordering: str | None, models
 ) -> Select:
-    Language = models["Language"]
-    Word = models["Word"]
+    Language = models['Language']
+    Word = models['Word']
 
-    words_count = (
-        select(func.count(distinct(Word.id)))
-        .where(Word.language_id == Language.id)
-        .correlate(Language)
-        .scalar_subquery()
+    # Use LEFT JOIN with GROUP BY for better performance instead of correlated subquery
+    stmt = (
+        select(
+            Language.id,
+            Language.isocode,
+            Language.name_local,
+            Language.name_en,
+            Language.name_ru,
+            Language.flag_icon,
+            Language.learning_available,
+            Language.interface_available,
+            Language.sorting,
+            func.count(distinct(Word.id)).label('words_count'),
+        )
+        .select_from(Language)
+        .outerjoin(Word, Word.language_id == Language.id)
+        .group_by(
+            Language.id,
+            Language.isocode,
+            Language.name_local,
+            Language.name_en,
+            Language.name_ru,
+            Language.flag_icon,
+            Language.learning_available,
+            Language.interface_available,
+            Language.sorting,
+        )
     )
-
-    stmt = select(
-        Language.id,
-        Language.isocode,
-        Language.name_local,
-        Language.name_en,
-        Language.name_ru,
-        Language.flag_icon,
-        Language.learning_available,
-        Language.interface_available,
-        Language.sorting,
-        words_count.label("words_count"),
-    ).select_from(Language)
 
     if interface_only:
         stmt = stmt.where(Language.interface_available.is_(True))
     if search:
-        pattern = f"%{search}%"
+        pattern = f'%{search}%'
         stmt = stmt.where(
             or_(
                 Language.name_local.ilike(pattern),
@@ -339,12 +348,16 @@ def build_global_languages_stmt(
             )
         )
 
-    if ordering == "-words_count":
+    if ordering == '-words_count':
         stmt = stmt.order_by(
-            words_count.desc(), Language.sorting.desc(), Language.name_local
+            func.count(distinct(Word.id)).desc(),
+            Language.sorting.desc(),
+            Language.name_local,
         )
-    elif ordering == "words_count":
-        stmt = stmt.order_by(words_count, Language.sorting.desc(), Language.name_local)
+    elif ordering == 'words_count':
+        stmt = stmt.order_by(
+            func.count(distinct(Word.id)), Language.sorting.desc(), Language.name_local
+        )
     else:
         stmt = stmt.order_by(Language.sorting.desc(), Language.name_local)
 
