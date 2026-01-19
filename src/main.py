@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api.routers import main_router
@@ -17,6 +18,17 @@ Path(MEDIA_ROOT).mkdir(parents=True, exist_ok=True)
 
 # монтируем только если используем локальный storage (например в dev)
 if not settings.USE_S3:
-    app.mount(MEDIA_URL.rstrip('/'), StaticFiles(directory=str(MEDIA_ROOT)), name="media")
+    app.mount(
+        MEDIA_URL.rstrip('/'), StaticFiles(directory=str(MEDIA_ROOT)), name='media'
+    )
+
+# CORS for local/dev and configurable origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS or ['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
 
 app.include_router(main_router)
