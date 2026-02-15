@@ -92,9 +92,7 @@ def apply_word_basic_filters(
 ):
     """Apply basic word filters (language, tags, types, etc.)."""
     if params.languages:
-        stmt = stmt.join(Language, isouter=False).where(
-            Language.isocode.in_(params.languages)
-        )
+        stmt = stmt.join(Word.language).where(Language.isocode.in_(params.languages))
     if params.tags:
         stmt = stmt.join(Word.tags).where(Tag.name.in_(params.tags))
     if params.types:

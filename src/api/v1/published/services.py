@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Iterable, Sequence
 from uuid import UUID
 
@@ -9,14 +10,13 @@ from fastapi import HTTPException
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.exc import IntegrityError
+from asyncpg.exceptions import UniqueViolationError
 
 from api.v1.utils.ordering import apply_ordering
 from api.v1.utils.searching import apply_search
 from api.v1.utils.pagination import normalize_pagination
-from api.v1.vocabulary.models import VOCAB_MODELS
 from api.v1.vocabulary.mapping import map_word, map_word_read
-from api.v1.vocabulary.schemas import WordReadOut, WordResolveOut
-from api.v1.collections.schemas import CollectionReadOut, CollectionResolveOut
 from api.v1.vocabulary.params import WordsListParams, CollectionsListParams
 from api.v1.vocabulary.filters import apply_word_filters
 from api.v1.collections.mapping import map_collection
@@ -31,19 +31,27 @@ from api.v1.translations.schemas import TranslationOut
 from api.v1.definitions.schemas import DefinitionOut
 from api.v1.usage_examples.schemas import ExampleOut
 from api.v1.image_associations.schemas import ImageOut
+from api.v1.collections.schemas import (
+    CollectionResolveOut,
+    CollectionCommentOut,
+    CollectionCommentsPageOut,
+)
+from api.v1.vocabulary.schemas import (
+    WordReadOut,
+    WordResolveOut,
+    WordsWithAuthorPageOut,
+    WordCommentOut,
+    WordCommentsPageOut,
+)
 from api.v1.published.schemas import (
-    WordsPageOut,
     WordListWithAuthorOut,
     WordPublishedProfileOut,
     CollectionPublishedProfileOut,
-    CollectionCommentOut,
-    CollectionCommentsPageOut,
-    WordCommentOut,
-    WordCommentsPageOut,
     CollectionSuggestedWordOut,
     CollectionSuggestedWordsPageOut,
 )
-from core.constants import AccessLevelsEnum, RequestStatusEnum
+from api.v1.vocabulary.models import VOCAB_MODELS
+from core.constants import AccessLevelsEnum, RequestStatusEnum, ActivityStatusEnum
 from apps.users.models import Friend, Subscription, User
 from apps.vocabulary.models import (
     CollectionSubscription,
@@ -268,6 +276,10 @@ async def published_words_list_service(
         base_dict['translations_count'] = len(translations_list)
         base_dict['background_image_url'] = background_image_url
 
+        # Remove activity_status and activity_progress from published words
+        base_dict.pop('activity_status', None)
+        base_dict.pop('activity_progress', None)
+
         dto = WordListWithAuthorOut.model_validate(base_dict)
         results.append(dto)
 
@@ -303,6 +315,7 @@ async def published_word_detail_service(
             selectinload(Word.types),
             selectinload(Word.language),
             selectinload(Word.author).selectinload(User.settings),
+            selectinload(Word.source_word).selectinload(Word.author),
         )
     )
     word = (await session.execute(stmt)).scalar_one_or_none()
@@ -562,6 +575,8 @@ async def published_word_detail_service(
         )
     ).scalar_one()
 
+    # Comments count
+    WordComment = models['WordComment']
     comments_count = (
         await session.execute(
             select(func.count())
@@ -570,9 +585,37 @@ async def published_word_detail_service(
         )
     ).scalar_one()
 
+    # Fetch a few comments for the profile (up to 3)
+    comments = []
+    if comments_count > 0:
+        comments_stmt = (
+            select(WordComment)
+            .where(WordComment.word_id == word.id)
+            .order_by(WordComment.created.desc())
+            .limit(3)
+            .options(
+                selectinload(WordComment.likes),
+                selectinload(WordComment.dislikes),
+                selectinload(WordComment.answers),
+                selectinload(WordComment.author),
+                selectinload(WordComment.word),
+            )
+        )
+        comments_rows = (await session.execute(comments_stmt)).scalars().all()
+        comments = [_map_word_comment(c, user_id) for c in comments_rows]
+
     base = map_word_read(word).model_dump()
-    # Published profile should not expose activity_status
+    # Published profile should not expose activity_status or the simple author string,
+    # and we override collections/collections_count, synonyms/synonyms_count, and comments/comments_count explicitly below.
     base.pop('activity_status', None)
+    base.pop('author', None)
+    base.pop('collections', None)
+    base.pop('collections_count', None)
+    base.pop('synonyms', None)
+    base.pop('synonyms_count', None)
+    base.pop('comments', None)
+    base.pop('comments_count', None)
+    # source_word is already included in map_word_read, so keep it
     return WordPublishedProfileOut(
         **base,
         author=author_payload,
@@ -580,11 +623,8 @@ async def published_word_detail_service(
         collections_count=collections_count,
         synonyms=[],
         synonyms_count=synonyms_count,
-        comments=[],
         comments_count=comments_count,
-        images_count=len(images),
-        definitions_count=len(definitions),
-        examples_count=len(examples),
+        comments=comments,
         favorite_for_amount=favorite_for_amount,
         borrowings_amount=0,
     )
@@ -749,7 +789,7 @@ async def published_collection_detail_service(
     user_id: UUID | None,
     collection_id: UUID,
     models: dict = VOCAB_MODELS,
-):
+) -> CollectionPublishedProfileOut:
     Collection = models['Collection']
     FavoriteCollection = models['FavoriteCollection']
     WordsInCollections = models['WordsInCollections']
@@ -767,6 +807,7 @@ async def published_collection_detail_service(
         .options(
             selectinload(Collection.tags),
             selectinload(Collection.author).selectinload(User.settings),
+            selectinload(Collection.source_collection).selectinload(Collection.author),
             selectinload(Collection.words_in_collections)
             .selectinload(WordsInCollections.word)
             .selectinload(Word.tags),
@@ -955,6 +996,90 @@ async def published_collection_detail_service(
         )
     ).scalar_one()
 
+    # Fetch a few comments for the profile (up to 3)
+    comments = []
+    if comments_count > 0:
+        comments_stmt = (
+            select(CollectionComment)
+            .where(CollectionComment.collection_id == coll.id)
+            .order_by(CollectionComment.created.desc())
+            .limit(3)
+            .options(
+                selectinload(CollectionComment.likes),
+                selectinload(CollectionComment.dislikes),
+                selectinload(CollectionComment.answers),
+                selectinload(CollectionComment.author),
+                selectinload(CollectionComment.collection),
+            )
+        )
+        comments_rows = (await session.execute(comments_stmt)).scalars().all()
+        comments = [_map_comment(c, user_id) for c in comments_rows]
+
+    # Suggestions count (only PENDING)
+    Suggested = models['WordsSuggestedToCollections']
+    suggestions_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(Suggested)
+            .where(
+                Suggested.collection_id == coll.id,
+                Suggested.status == RequestStatusEnum.PENDING,
+            )
+        )
+    ).scalar_one()
+
+    # Suggestions approved/rejected counts (for author)
+    suggestions_approved_count = 0
+    suggestions_rejected_count = 0
+    if user_id and coll.author_id == user_id:
+        suggestions_approved_count = (
+            await session.execute(
+                select(func.count())
+                .select_from(Suggested)
+                .where(
+                    Suggested.collection_id == coll.id,
+                    Suggested.status == RequestStatusEnum.APPROVED,
+                )
+            )
+        ).scalar_one()
+        suggestions_rejected_count = (
+            await session.execute(
+                select(func.count())
+                .select_from(Suggested)
+                .where(
+                    Suggested.collection_id == coll.id,
+                    Suggested.status == RequestStatusEnum.REJECTED,
+                )
+            )
+        ).scalar_one()
+
+    # Build source_collection payload if collection is borrowed
+    source_collection_payload = None
+    source_collection_obj = getattr(coll, 'source_collection', None)
+    if source_collection_obj is not None:
+        from api.v1.published.schemas import SourceCollectionOut
+
+        source_collection_author_obj = getattr(source_collection_obj, 'author', None)
+        source_collection_author_payload = None
+        if source_collection_author_obj is not None:
+            source_collection_author_payload = {
+                'id': source_collection_author_obj.id,
+                'slug': source_collection_author_obj.slug,
+                'username': source_collection_author_obj.username,
+                'first_name': source_collection_author_obj.first_name,
+                'profile_image_url': source_collection_author_obj.profile_image_url,
+                'profile_header_image_url': source_collection_author_obj.profile_header_image_url,
+                'is_official': bool(
+                    getattr(source_collection_author_obj, 'is_official', False)
+                ),
+            }
+        source_collection_payload = SourceCollectionOut(
+            id=source_collection_obj.id,
+            slug=source_collection_obj.slug,
+            title=source_collection_obj.title,
+            author=source_collection_author_payload,
+        )
+
     return CollectionPublishedProfileOut(
         id=coll.id,
         slug=coll.slug,
@@ -964,6 +1089,7 @@ async def published_collection_detail_service(
         favorite=coll._favorite,
         created=coll.created,
         modified=coll.modified,
+        source_collection=source_collection_payload,
         words_languages=words_languages,
         words_count=words_count,
         words_texts=words_texts,
@@ -994,14 +1120,14 @@ async def published_collection_detail_service(
         last_word_added=None,
         allow_comments=bool(coll.allow_comments),
         comments_count=comments_count,
-        comments=[],
+        comments=comments,
         allow_suggestions=bool(coll.allow_suggestions),
         allow_suggestions_notifications=bool(coll.allow_suggestions_notifications),
-        suggestions_count=0,
-        suggestions_approved_count=0,
-        suggestions_rejected_count=0,
+        suggestions_count=suggestions_count,
+        suggestions_approved_count=suggestions_approved_count,
+        suggestions_rejected_count=suggestions_rejected_count,
         disallow_suggestions_for=False,
-        suggestions=[],
+        suggestions=[],  # Empty - fetch separately via suggested-words endpoint
     )
 
 
@@ -1061,7 +1187,7 @@ async def published_collection_words_service(
     page: int,
     limit: int,
     models: dict = VOCAB_MODELS,
-) -> WordsPageOut:
+) -> WordsWithAuthorPageOut:
     Collection = models['Collection']
     Word = models['Word']
     WordsInCollections = models['WordsInCollections']
@@ -1130,7 +1256,7 @@ async def published_collection_words_service(
         w._favorite = w.id in fav_ids
         results.append(map_word(w))
 
-    return WordsPageOut(page=page, limit=limit, count=total, results=results)
+    return WordsWithAuthorPageOut(page=page, limit=limit, count=total, results=results)
 
 
 async def published_word_borrow_service(
@@ -1141,7 +1267,12 @@ async def published_word_borrow_service(
     models: dict = VOCAB_MODELS,
 ) -> dict:
     Word = models['Word']
+    WordTranslations = models['WordTranslations']
+    WordDefinitions = models['WordDefinitions']
+    WordUsageExamples = models['WordUsageExamples']
+    WordImageAssociations = models['WordImageAssociations']
 
+    # Load source word with language; we only need primitive values for copy
     src = (
         await session.execute(
             select(Word).options(selectinload(Word.language)).where(Word.id == word_id)
@@ -1150,15 +1281,197 @@ async def published_word_borrow_service(
     if not src:
         raise HTTPException(status_code=404, detail='Word not found')
 
+    # Cache primitive fields BEFORE we start transaction work, so we don't
+    # trigger lazy loads on an expired `src` inside exception handlers.
+    src_text = src.text
+    src_language_id = src.language_id
+
+    # Create a "borrowed" copy of the word, similar to save_word_copy in DRF:
+    # - keep text/language
+    # - set new author
+    # - link to source_word
+    # - reset activity fields
+    # - make it private and disallow access change
     new_word = Word(
-        text=src.text,
-        language_id=getattr(src.language, 'id', None),
+        text=src_text,
+        language_id=src_language_id,
         author_id=user_id,
         source_word_id=src.id,
+        is_premium=False,
+        activity_status=ActivityStatusEnum.INACTIVE,
+        activity_progress=ActivityStatusEnum.activity_progress_default,
+        read_access_level=AccessLevelsEnum.PRIVATE,
+        add_access_level=AccessLevelsEnum.PRIVATE,
+        allow_access_change=False,
     )
-    session.add(new_word)
-    await session.commit()
+
+    try:
+        session.add(new_word)
+        # Flush so new_word gets an ID but stay in the same transaction
+        try:
+            await session.flush()
+        except IntegrityError as flush_exc:
+            await session.rollback()
+            # In borrow context, any IntegrityError here is from the unique
+            # index (unique_words_in_user_voc). Treat it as "already_exist".
+            error_msg = (
+                str(flush_exc.orig) if hasattr(flush_exc, 'orig') else str(flush_exc)
+            )
+            is_unique_violation = (
+                'unique_words_in_user_voc' in error_msg
+                or 'unique' in error_msg.lower()
+                or 'duplicate' in error_msg.lower()
+                or (
+                    hasattr(flush_exc, 'orig')
+                    and isinstance(flush_exc.orig, UniqueViolationError)
+                )
+            )
+
+            if not is_unique_violation:
+                raise
+
+            # Find the existing word and raise HTTPException
+            existing_word = (
+                await session.execute(
+                    select(Word)
+                    .options(selectinload(Word.language))
+                    .where(
+                        Word.text == src_text,
+                        Word.author_id == user_id,
+                        Word.language_id == src_language_id,
+                    )
+                )
+            ).scalar_one_or_none()
+
+            if existing_word:
+                existing_word_dto = map_word_read(existing_word)
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        'exception_code': 'already_exist',
+                        'detail': 'Word already exists in your vocabulary',
+                        'existing_object': existing_word_dto.model_dump(mode='json'),
+                    },
+                ) from flush_exc
+            else:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        'exception_code': 'already_exist',
+                        'detail': 'Word already exists in your vocabulary',
+                    },
+                ) from flush_exc
+
+        # Copy translations associations
+        src_translations = (
+            await session.execute(
+                select(WordTranslations.translation_id).where(
+                    WordTranslations.word_id == src.id
+                )
+            )
+        ).scalars()
+        for tr_id in src_translations:
+            session.add(WordTranslations(word_id=new_word.id, translation_id=tr_id))
+
+        # Copy definitions associations
+        src_definitions = (
+            await session.execute(
+                select(WordDefinitions.definition_id).where(
+                    WordDefinitions.word_id == src.id
+                )
+            )
+        ).scalars()
+        for def_id in src_definitions:
+            session.add(WordDefinitions(word_id=new_word.id, definition_id=def_id))
+
+        # Copy usage examples associations
+        src_examples = (
+            await session.execute(
+                select(WordUsageExamples.example_id).where(
+                    WordUsageExamples.word_id == src.id
+                )
+            )
+        ).scalars()
+        for ex_id in src_examples:
+            session.add(WordUsageExamples(word_id=new_word.id, example_id=ex_id))
+
+        # Copy image associations
+        src_images = (
+            await session.execute(
+                select(WordImageAssociations.image_id).where(
+                    WordImageAssociations.word_id == src.id
+                )
+            )
+        ).scalars()
+        for img_id in src_images:
+            session.add(WordImageAssociations(word_id=new_word.id, image_id=img_id))
+
+        await session.commit()
+    except IntegrityError as exc:
+        # Any integrity error here means the word already exists in user's vocabulary
+        await session.rollback()
+
+        error_msg = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
+        is_unique_violation = (
+            'unique_words_in_user_voc' in error_msg
+            or 'unique' in error_msg.lower()
+            or 'duplicate' in error_msg.lower()
+            or (hasattr(exc, 'orig') and isinstance(exc.orig, UniqueViolationError))
+        )
+
+        if not is_unique_violation:
+            raise
+
+        # Find the existing word with same text, author, and language
+        existing_word = (
+            await session.execute(
+                select(Word)
+                .options(
+                    selectinload(Word.language),
+                    selectinload(Word.source_word).selectinload(Word.author),
+                )
+                .where(
+                    Word.text == src_text,
+                    Word.author_id == user_id,
+                    Word.language_id == src_language_id,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if existing_word:
+            existing_word_dto = map_word_read(existing_word)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    'exception_code': 'already_exist',
+                    'detail': 'Word already exists in your vocabulary',
+                    'existing_object': existing_word_dto.model_dump(mode='json'),
+                },
+            ) from exc
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    'exception_code': 'already_exist',
+                    'detail': 'Word already exists in your vocabulary',
+                },
+            ) from exc
+
     await session.refresh(new_word)
+    # Reload word with all relationships including source_word
+    new_word = (
+        await session.execute(
+            select(Word)
+            .where(Word.id == new_word.id)
+            .options(
+                selectinload(Word.tags),
+                selectinload(Word.types),
+                selectinload(Word.language),
+                selectinload(Word.author),
+                selectinload(Word.source_word).selectinload(Word.author),
+            )
+        )
+    ).scalar_one()
     return map_word_read(new_word)
 
 
@@ -1175,7 +1488,7 @@ async def published_word_favorite_toggle_service(
     if not src:
         raise HTTPException(status_code=404, detail='Word not found')
     return await word_favorite_toggle_service(
-        session=session, word_id=src.id, user_id=user_id
+        session=session, word_id=src.id, user_id=user_id, author_only=False
     )
 
 
@@ -1327,10 +1640,10 @@ async def published_synonyms_list_service(
     user_id: UUID | None,
     page: int,
     limit: int,
-) -> WordsPageOut:
+) -> WordsWithAuthorPageOut:
     # Not enough data to expose synonyms separately; return empty list to keep endpoint functional.
     page, limit, _ = normalize_pagination(page, limit)
-    return WordsPageOut(page=page, limit=limit, count=0, results=[])
+    return WordsWithAuthorPageOut(page=page, limit=limit, count=0, results=[])
 
 
 async def published_synonym_detail_service(
@@ -1348,10 +1661,12 @@ async def published_collection_subscribe_service(
     session: AsyncSession,
     user_id: UUID,
     collection_id: UUID,
-    enable_notifications: bool | None = None,
+    notifications: bool | None = None,
     models: dict = VOCAB_MODELS,
-) -> CollectionReadOut:
+) -> CollectionPublishedProfileOut:
     Collection = models['Collection']
+
+    # Load collection minimally for access check
     coll = (
         await session.execute(select(Collection).where(Collection.id == collection_id))
     ).scalar_one_or_none()
@@ -1372,59 +1687,163 @@ async def published_collection_subscribe_service(
             )
         )
     ).scalar_one_or_none()
-    if sub:
-        # toggle off
-        await session.delete(sub)
+
+    # DRF behavior:
+    # - If "notifications" query param is present, only toggle enable_notifications
+    #   on an existing subscription (do not subscribe/unsubscribe).
+    # - Otherwise, toggle the subscription itself (create/delete).
+    if notifications is not None:
+        if not sub:
+            # Mirror DRF get_object_or_404 behavior when trying to toggle
+            # notifications without an existing subscription.
+            raise HTTPException(status_code=404, detail='Subscription not found')
+
+        sub.enable_notifications = not bool(sub.enable_notifications)
         await session.commit()
-        coll._favorite = getattr(coll, '_favorite', False)
-        return map_collection(coll, include_words=False)
+    else:
+        if sub:
+            # Toggle off subscription
+            await session.delete(sub)
+            await session.commit()
+        else:
+            # Create subscription with notifications enabled by default
+            sub = CollectionSubscription(
+                subscriber_id=user_id,
+                collection_id=coll.id,
+                enable_notifications=True,
+            )
+            session.add(sub)
+            await session.commit()
 
-    sub = CollectionSubscription(
-        subscriber_id=user_id,
-        collection_id=coll.id,
-        enable_notifications=enable_notifications
-        if enable_notifications is not None
-        else True,
+    # After any change, reuse the published collection detail service
+    # to return a fully populated published collection profile.
+    return await published_collection_detail_service(
+        session=session, user_id=user_id, collection_id=collection_id, models=models
     )
-    session.add(sub)
-    await session.commit()
-    coll._favorite = getattr(coll, '_favorite', False)
-    return map_collection(coll, include_words=False)
 
 
-def _map_comment(comment: CollectionComment) -> CollectionCommentOut:
-    likes = len(getattr(comment, 'likes', []) or [])
-    dislikes = len(getattr(comment, 'dislikes', []) or [])
-    answers = len(getattr(comment, 'answers', []) or [])
+def _format_relative_time(dt: datetime | None) -> str:
+    """Format datetime as relative time string (e.g., '2 hours ago')."""
+    if not dt:
+        return ''
+
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    delta = now - dt
+
+    if delta.total_seconds() < 60:
+        return 'just now'
+    elif delta.total_seconds() < 3600:
+        minutes = int(delta.total_seconds() / 60)
+        return f'{minutes} minute{"s" if minutes != 1 else ""} ago'
+    elif delta.total_seconds() < 86400:
+        hours = int(delta.total_seconds() / 3600)
+        return f'{hours} hour{"s" if hours != 1 else ""} ago'
+    elif delta.total_seconds() < 604800:
+        days = int(delta.total_seconds() / 86400)
+        return f'{days} day{"s" if days != 1 else ""} ago'
+    elif delta.total_seconds() < 2592000:
+        weeks = int(delta.total_seconds() / 604800)
+        return f'{weeks} week{"s" if weeks != 1 else ""} ago'
+    elif delta.total_seconds() < 31536000:
+        months = int(delta.total_seconds() / 2592000)
+        return f'{months} month{"s" if months != 1 else ""} ago'
+    else:
+        years = int(delta.total_seconds() / 31536000)
+        return f'{years} year{"s" if years != 1 else ""} ago'
+
+
+def _map_comment(
+    comment: CollectionComment, user_id: UUID | None = None
+) -> CollectionCommentOut:
+    likes = getattr(comment, 'likes', []) or []
+    dislikes = getattr(comment, 'dislikes', []) or []
+    answers = getattr(comment, 'answers', []) or []
+
+    author = getattr(comment, 'author', None)
+    collection = getattr(comment, 'collection', None)
+
+    liked_by_user = False
+    disliked_by_user = False
+    if user_id:
+        liked_by_user = any(u.id == user_id for u in likes)
+        disliked_by_user = any(u.id == user_id for u in dislikes)
+
+    author_dict = None
+    if author:
+        # Build a plain dict so that the target CollectionCommentOut schema
+        # (which uses its own AuthorShortOut from collections.schemas)
+        # can construct the proper model instance without class mismatch.
+        author_dict = {
+            'slug': getattr(author, 'slug', ''),
+            'username': getattr(author, 'username', ''),
+            'first_name': getattr(author, 'first_name', None),
+            'profile_image_url': getattr(author, 'profile_image_url', None),
+        }
+
     return CollectionCommentOut(
         id=comment.id,
-        collection_id=comment.collection_id,
-        author_id=comment.author_id,
+        collection=getattr(collection, 'slug', '') if collection else '',
+        author=author_dict,
         text=comment.text,
         author_liked=bool(comment.author_liked),
-        likes_count=likes,
-        dislikes_count=dislikes,
-        answers_count=answers,
-        created=comment.created,
-        modified=comment.modified,
+        liked_by_user=liked_by_user,
+        disliked_by_user=disliked_by_user,
+        likes_count=len(likes),
+        dislikes_count=len(dislikes),
+        answers_count=len(answers),
+        modified_relative=_format_relative_time(comment.modified or comment.created),
+        text_modified=bool(comment.text_modified),
     )
 
 
-def _map_word_comment(comment: WordComment) -> WordCommentOut:
-    likes = len(getattr(comment, 'likes', []) or [])
-    dislikes = len(getattr(comment, 'dislikes', []) or [])
-    answers = len(getattr(comment, 'answers', []) or [])
+def _map_word_comment(
+    comment: WordComment, user_id: UUID | None = None
+) -> WordCommentOut:
+    likes = getattr(comment, 'likes', []) or []
+    dislikes = getattr(comment, 'dislikes', []) or []
+    answers = getattr(comment, 'answers', []) or []
+
+    author = getattr(comment, 'author', None)
+    word = getattr(comment, 'word', None)
+
+    liked_by_user = False
+    disliked_by_user = False
+    if user_id:
+        liked_by_user = any(u.id == user_id for u in likes)
+        disliked_by_user = any(u.id == user_id for u in dislikes)
+
+    author_dict = None
+    if author:
+        # Same as in _map_comment: build a plain dict so that the
+        # WordCommentOut schema (imported from vocabulary.schemas)
+        # can construct its own AuthorShortOut instance correctly.
+        author_dict = {
+            'slug': getattr(author, 'slug', ''),
+            'username': getattr(author, 'username', ''),
+            'first_name': getattr(author, 'first_name', None),
+            'profile_image_url': getattr(author, 'profile_image_url', None),
+        }
+
     return WordCommentOut(
         id=comment.id,
-        word_id=comment.word_id,
-        author_id=comment.author_id,
+        word_id=getattr(comment, 'word_id', None) or (word.id if word else None),
+        author_id=getattr(comment, 'author_id', None)
+        or (author.id if author else None),
+        author=author_dict,
         text=comment.text,
         author_liked=bool(comment.author_liked),
-        likes_count=likes,
-        dislikes_count=dislikes,
-        answers_count=answers,
-        created=comment.created,
-        modified=comment.modified,
+        liked_by_user=liked_by_user,
+        disliked_by_user=disliked_by_user,
+        likes_count=len(likes),
+        dislikes_count=len(dislikes),
+        answers_count=len(answers),
+        created=getattr(comment, 'created', None),
+        modified=getattr(comment, 'modified', None),
+        modified_relative=_format_relative_time(comment.modified or comment.created),
+        text_modified=bool(comment.text_modified),
     )
 
 
@@ -1459,6 +1878,8 @@ async def published_collection_comments_list_service(
             selectinload(CollectionComment.likes),
             selectinload(CollectionComment.dislikes),
             selectinload(CollectionComment.answers),
+            selectinload(CollectionComment.author),
+            selectinload(CollectionComment.collection),
         )
     )
     total = (
@@ -1467,9 +1888,20 @@ async def published_collection_comments_list_service(
     rows: Sequence = (
         (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
     )
-    results = [_map_comment(c) for c in rows]
+    results = [_map_comment(c, user_id) for c in rows]
+
+    # Build pagination links
+    from api.v1.utils.pagination import build_pagination_links
+
+    next_link, previous_link = build_pagination_links(
+        base_url=f'/published/collections/{collection_id}/comments',
+        page=page,
+        limit=limit,
+        total=total,
+    )
+
     return CollectionCommentsPageOut(
-        page=page, limit=limit, count=total, results=results
+        count=total, next=next_link, previous=previous_link, results=results
     )
 
 
@@ -1479,8 +1911,10 @@ async def published_collection_comment_create_service(
     user_id: UUID,
     collection_id: UUID,
     text: str,
+    page: int = 1,
+    limit: int = 32,
     models: dict = VOCAB_MODELS,
-) -> CollectionCommentOut:
+) -> CollectionCommentsPageOut:
     Collection = models['Collection']
     CollectionComment = models['CollectionComment']
 
@@ -1499,8 +1933,42 @@ async def published_collection_comment_create_service(
     )
     session.add(comment)
     await session.commit()
-    await session.refresh(comment)
-    return _map_comment(comment)
+
+    # Return paginated comments list
+    page, limit, offset = normalize_pagination(page, limit)
+    stmt = (
+        select(CollectionComment)
+        .where(CollectionComment.collection_id == collection_id)
+        .order_by(CollectionComment.created.desc())
+        .options(
+            selectinload(CollectionComment.likes),
+            selectinload(CollectionComment.dislikes),
+            selectinload(CollectionComment.answers),
+            selectinload(CollectionComment.author),
+            selectinload(CollectionComment.collection),
+        )
+    )
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+    rows: Sequence = (
+        (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
+    )
+    results = [_map_comment(c, user_id) for c in rows]
+
+    # Build pagination links
+    from api.v1.utils.pagination import build_pagination_links
+
+    next_link, previous_link = build_pagination_links(
+        base_url=f'/published/collections/{collection_id}/comments',
+        page=page,
+        limit=limit,
+        total=total,
+    )
+
+    return CollectionCommentsPageOut(
+        count=total, next=next_link, previous=previous_link, results=results
+    )
 
 
 async def published_collection_comment_patch_service(
@@ -1533,7 +2001,21 @@ async def published_collection_comment_patch_service(
     comment.text_modified = True
     await session.commit()
     await session.refresh(comment)
-    return _map_comment(comment)
+    # Reload with relationships
+    comment = (
+        await session.execute(
+            select(CollectionComment)
+            .options(
+                selectinload(CollectionComment.likes),
+                selectinload(CollectionComment.dislikes),
+                selectinload(CollectionComment.answers),
+                selectinload(CollectionComment.author),
+                selectinload(CollectionComment.collection),
+            )
+            .where(CollectionComment.id == comment.id)
+        )
+    ).scalar_one()
+    return _map_comment(comment, user_id)
 
 
 async def published_collection_comment_delete_service(
@@ -1566,6 +2048,7 @@ async def _toggle_reaction(
     models: dict = VOCAB_MODELS,
 ) -> CollectionCommentOut:
     CollectionComment = models['CollectionComment']
+    Collection = models['Collection']
     comment = (
         await session.execute(
             select(CollectionComment)
@@ -1573,6 +2056,7 @@ async def _toggle_reaction(
                 selectinload(CollectionComment.likes),
                 selectinload(CollectionComment.dislikes),
                 selectinload(CollectionComment.answers),
+                selectinload(CollectionComment.collection),
             )
             .where(CollectionComment.id == comment_id)
         )
@@ -1580,29 +2064,60 @@ async def _toggle_reaction(
     if not comment:
         raise HTTPException(status_code=404, detail='Comment not found')
 
+    # Check if user has access to the collection
+    coll = (
+        comment.collection
+        or (
+            await session.execute(
+                select(Collection).where(Collection.id == comment.collection_id)
+            )
+        ).scalar_one_or_none()
+    )
+    if not coll:
+        raise HTTPException(status_code=404, detail='Collection not found')
+
+    friend_ids = await _get_friend_ids(session, user_id)
+    if not _can_view(coll.read_access_level, user_id, coll.author_id, friend_ids):
+        raise HTTPException(status_code=404, detail='Collection not available')
+
+    # Fetch the user to add to likes/dislikes
+    user = (
+        await session.execute(select(User).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail='User not found')
+
     # remove opposite reaction
     if reaction == 'like':
         comment.dislikes = [u for u in comment.dislikes if u.id != user_id]
         if any(u.id == user_id for u in comment.likes):
             comment.likes = [u for u in comment.likes if u.id != user_id]
         else:
-            comment.likes.append(
-                type(comment.likes[0])()
-                if comment.likes
-                else None  # placeholder won't work
-            )
+            comment.likes.append(user)
     elif reaction == 'dislike':
         comment.likes = [u for u in comment.likes if u.id != user_id]
         if any(u.id == user_id for u in comment.dislikes):
             comment.dislikes = [u for u in comment.dislikes if u.id != user_id]
         else:
-            comment.dislikes.append(
-                type(comment.dislikes[0])() if comment.dislikes else None
-            )
+            comment.dislikes.append(user)
 
     await session.commit()
     await session.refresh(comment)
-    return _map_comment(comment)
+    # Reload with relationships
+    comment = (
+        await session.execute(
+            select(CollectionComment)
+            .options(
+                selectinload(CollectionComment.likes),
+                selectinload(CollectionComment.dislikes),
+                selectinload(CollectionComment.answers),
+                selectinload(CollectionComment.author),
+                selectinload(CollectionComment.collection),
+            )
+            .where(CollectionComment.id == comment.id)
+        )
+    ).scalar_one()
+    return _map_comment(comment, user_id)
 
 
 async def published_collection_comment_like_service(
@@ -1669,7 +2184,21 @@ async def published_collection_comment_author_like_service(
     comment.author_liked = not bool(comment.author_liked)
     await session.commit()
     await session.refresh(comment)
-    return _map_comment(comment)
+    # Reload with relationships
+    comment = (
+        await session.execute(
+            select(CollectionComment)
+            .options(
+                selectinload(CollectionComment.likes),
+                selectinload(CollectionComment.dislikes),
+                selectinload(CollectionComment.answers),
+                selectinload(CollectionComment.author),
+                selectinload(CollectionComment.collection),
+            )
+            .where(CollectionComment.id == comment.id)
+        )
+    ).scalar_one()
+    return _map_comment(comment, user_id)
 
 
 async def published_collection_comment_answers_list_service(
@@ -1697,9 +2226,10 @@ async def published_collection_comment_answers_list_service(
     answers = parent.answers or []
     total = len(answers)
     sliced = answers[offset : offset + limit]
-    results = [_map_comment(a) for a in sliced]
+    results = [_map_comment(a, user_id) for a in sliced]
+    # Answers list doesn't need pagination links (it's a simple list)
     return CollectionCommentsPageOut(
-        page=page, limit=limit, count=total, results=results
+        count=total, next=None, previous=None, results=results
     )
 
 
@@ -1731,7 +2261,21 @@ async def published_collection_comment_answer_create_service(
     parent.answers.append(reply)
     await session.commit()
     await session.refresh(reply)
-    return _map_comment(reply)
+    # Reload with relationships
+    reply = (
+        await session.execute(
+            select(CollectionComment)
+            .options(
+                selectinload(CollectionComment.likes),
+                selectinload(CollectionComment.dislikes),
+                selectinload(CollectionComment.answers),
+                selectinload(CollectionComment.author),
+                selectinload(CollectionComment.collection),
+            )
+            .where(CollectionComment.id == reply.id)
+        )
+    ).scalar_one()
+    return _map_comment(reply, user_id)
 
 
 # ----------------------------
@@ -1769,6 +2313,8 @@ async def published_word_comments_list_service(
             selectinload(WordComment.likes),
             selectinload(WordComment.dislikes),
             selectinload(WordComment.answers),
+            selectinload(WordComment.author),
+            selectinload(WordComment.word),
         )
     )
     total = (
@@ -1777,8 +2323,21 @@ async def published_word_comments_list_service(
     rows: Sequence = (
         (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
     )
-    results = [_map_word_comment(c) for c in rows]
-    return WordCommentsPageOut(page=page, limit=limit, count=total, results=results)
+    results = [_map_word_comment(c, user_id) for c in rows]
+
+    # Build pagination links
+    from api.v1.utils.pagination import build_pagination_links
+
+    next_link, previous_link = build_pagination_links(
+        base_url=f'/published/words/{word_id}/comments',
+        page=page,
+        limit=limit,
+        total=total,
+    )
+
+    return WordCommentsPageOut(
+        count=total, next=next_link, previous=previous_link, results=results
+    )
 
 
 async def published_word_comment_create_service(
@@ -1787,8 +2346,10 @@ async def published_word_comment_create_service(
     user_id: UUID,
     word_id: UUID,
     text: str,
+    page: int = 1,
+    limit: int = 32,
     models: dict = VOCAB_MODELS,
-) -> WordCommentOut:
+) -> WordCommentsPageOut:
     Word = models['Word']
     WordComment = models['WordComment']
 
@@ -1804,8 +2365,42 @@ async def published_word_comment_create_service(
     comment = WordComment(word_id=word_id, author_id=user_id, text=text)
     session.add(comment)
     await session.commit()
-    await session.refresh(comment)
-    return _map_word_comment(comment)
+
+    # Return paginated comments list
+    page, limit, offset = normalize_pagination(page, limit)
+    stmt = (
+        select(WordComment)
+        .where(WordComment.word_id == word_id)
+        .order_by(WordComment.created.desc())
+        .options(
+            selectinload(WordComment.likes),
+            selectinload(WordComment.dislikes),
+            selectinload(WordComment.answers),
+            selectinload(WordComment.author),
+            selectinload(WordComment.word),
+        )
+    )
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+    rows: Sequence = (
+        (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
+    )
+    results = [_map_word_comment(c, user_id) for c in rows]
+
+    # Build pagination links
+    from api.v1.utils.pagination import build_pagination_links
+
+    next_link, previous_link = build_pagination_links(
+        base_url=f'/published/words/{word_id}/comments',
+        page=page,
+        limit=limit,
+        total=total,
+    )
+
+    return WordCommentsPageOut(
+        count=total, next=next_link, previous=previous_link, results=results
+    )
 
 
 async def published_word_comment_patch_service(
@@ -1836,7 +2431,21 @@ async def published_word_comment_patch_service(
     comment.text_modified = True
     await session.commit()
     await session.refresh(comment)
-    return _map_word_comment(comment)
+    # Reload with relationships
+    comment = (
+        await session.execute(
+            select(WordComment)
+            .options(
+                selectinload(WordComment.likes),
+                selectinload(WordComment.dislikes),
+                selectinload(WordComment.answers),
+                selectinload(WordComment.author),
+                selectinload(WordComment.word),
+            )
+            .where(WordComment.id == comment.id)
+        )
+    ).scalar_one()
+    return _map_word_comment(comment, user_id)
 
 
 async def published_word_comment_delete_service(
@@ -1867,6 +2476,7 @@ async def _toggle_word_reaction(
     models: dict = VOCAB_MODELS,
 ) -> WordCommentOut:
     WordComment = models['WordComment']
+    Word = models['Word']
     comment = (
         await session.execute(
             select(WordComment)
@@ -1874,6 +2484,7 @@ async def _toggle_word_reaction(
                 selectinload(WordComment.likes),
                 selectinload(WordComment.dislikes),
                 selectinload(WordComment.answers),
+                selectinload(WordComment.word),
             )
             .where(WordComment.id == comment_id)
         )
@@ -1881,25 +2492,58 @@ async def _toggle_word_reaction(
     if not comment:
         raise HTTPException(status_code=404, detail='Comment not found')
 
+    # Check if user has access to the word
+    word = (
+        comment.word
+        or (
+            await session.execute(select(Word).where(Word.id == comment.word_id))
+        ).scalar_one_or_none()
+    )
+    if not word:
+        raise HTTPException(status_code=404, detail='Word not found')
+
+    friend_ids = await _get_friend_ids(session, user_id)
+    if not _can_view(word.read_access_level, user_id, word.author_id, friend_ids):
+        raise HTTPException(status_code=404, detail='Word not available')
+
+    # Fetch the user to add to likes/dislikes
+    user = (
+        await session.execute(select(User).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail='User not found')
+
     # remove opposite reaction
     if reaction == 'like':
         comment.dislikes = [u for u in comment.dislikes if u.id != user_id]
         if any(u.id == user_id for u in comment.likes):
             comment.likes = [u for u in comment.likes if u.id != user_id]
         else:
-            comment.likes.append(type(comment.likes[0])() if comment.likes else None)
+            comment.likes.append(user)
     elif reaction == 'dislike':
         comment.likes = [u for u in comment.likes if u.id != user_id]
         if any(u.id == user_id for u in comment.dislikes):
             comment.dislikes = [u for u in comment.dislikes if u.id != user_id]
         else:
-            comment.dislikes.append(
-                type(comment.dislikes[0])() if comment.dislikes else None
-            )
+            comment.dislikes.append(user)
 
     await session.commit()
     await session.refresh(comment)
-    return _map_word_comment(comment)
+    # Reload with relationships
+    comment = (
+        await session.execute(
+            select(WordComment)
+            .options(
+                selectinload(WordComment.likes),
+                selectinload(WordComment.dislikes),
+                selectinload(WordComment.answers),
+                selectinload(WordComment.author),
+                selectinload(WordComment.word),
+            )
+            .where(WordComment.id == comment.id)
+        )
+    ).scalar_one()
+    return _map_word_comment(comment, user_id)
 
 
 async def published_word_comment_like_service(
@@ -1964,7 +2608,21 @@ async def published_word_comment_author_like_service(
     comment.author_liked = not bool(comment.author_liked)
     await session.commit()
     await session.refresh(comment)
-    return _map_word_comment(comment)
+    # Reload with relationships
+    comment = (
+        await session.execute(
+            select(WordComment)
+            .options(
+                selectinload(WordComment.likes),
+                selectinload(WordComment.dislikes),
+                selectinload(WordComment.answers),
+                selectinload(WordComment.author),
+                selectinload(WordComment.word),
+            )
+            .where(WordComment.id == comment.id)
+        )
+    ).scalar_one()
+    return _map_word_comment(comment, user_id)
 
 
 async def published_word_comment_answers_list_service(
@@ -1992,8 +2650,9 @@ async def published_word_comment_answers_list_service(
     answers = parent.answers or []
     total = len(answers)
     sliced = answers[offset : offset + limit]
-    results = [_map_word_comment(a) for a in sliced]
-    return WordCommentsPageOut(page=page, limit=limit, count=total, results=results)
+    results = [_map_word_comment(a, user_id) for a in sliced]
+    # Answers list doesn't need pagination links (it's a simple list)
+    return WordCommentsPageOut(count=total, next=None, previous=None, results=results)
 
 
 async def published_word_comment_answer_create_service(
@@ -2022,22 +2681,118 @@ async def published_word_comment_answer_create_service(
     parent.answers.append(reply)
     await session.commit()
     await session.refresh(reply)
-    return _map_word_comment(reply)
+    # Reload with relationships
+    reply = (
+        await session.execute(
+            select(WordComment)
+            .options(
+                selectinload(WordComment.likes),
+                selectinload(WordComment.dislikes),
+                selectinload(WordComment.answers),
+                selectinload(WordComment.author),
+                selectinload(WordComment.word),
+            )
+            .where(WordComment.id == reply.id)
+        )
+    ).scalar_one()
+    return _map_word_comment(reply, user_id)
 
 
-# ----------------------------
-# Collection suggested words (published)
-# ----------------------------
+def _map_word_to_word_list_with_author(
+    w, user_id: UUID | None = None
+) -> WordListWithAuthorOut:
+    """Map a Word ORM object to WordListWithAuthorOut."""
+    from api.v1.published.schemas import WordListWithAuthorOut
+
+    author = getattr(w, 'author', None)
+    # Get images through the intermediate WordImageAssociations model
+    word_image_assocs = getattr(w, 'wordimageassociations', []) or []
+    images = [wia.image for wia in word_image_assocs if hasattr(wia, 'image')]
+
+    # Get background_image_url from the first image association
+    background_image_url = None
+    if images:
+        background_image_url = getattr(images[0], 'image_url', None)
+
+    # Get base word fields
+    base_dto = map_word(w)
+    base_dict = base_dto.model_dump()
+
+    # Add simplified author fields
+    base_dict['author'] = (
+        {
+            'slug': getattr(author, 'slug', None),
+            'username': getattr(author, 'username', None),
+            'first_name': getattr(author, 'first_name', None),
+            'profile_image_url': getattr(author, 'profile_image_url', None),
+        }
+        if author is not None
+        else None
+    )
+
+    # Extract translation objects for the frontend
+    word_translations = getattr(w, 'wordtranslations', []) or []
+    translations_list = [
+        {
+            'text': t.translation.text,
+            'language': getattr(t.translation.language, 'isocode', None)
+            if hasattr(t.translation, 'language')
+            else None,
+        }
+        for t in word_translations
+        if hasattr(t, 'translation')
+        and t.translation
+        and hasattr(t.translation, 'text')
+    ]
+    base_dict['translations'] = translations_list
+    base_dict['translations_count'] = len(translations_list)
+    base_dict['background_image_url'] = background_image_url
+
+    # Remove activity_status and activity_progress from published words
+    base_dict.pop('activity_status', None)
+    base_dict.pop('activity_progress', None)
+
+    # Set favorite (always set, defaulting to False)
+    base_dict['favorite'] = getattr(w, '_favorite', False)
+
+    return WordListWithAuthorOut.model_validate(base_dict)
 
 
-def _map_suggested_word(s: WordsSuggestedToCollections) -> CollectionSuggestedWordOut:
+def _map_suggested_word(
+    s: WordsSuggestedToCollections, user_id: UUID | None = None
+) -> CollectionSuggestedWordOut:
+    """Map a WordsSuggestedToCollections ORM object to CollectionSuggestedWordOut."""
+    # Format created_relative in DRF-style format (months:days:hours:minutes)
+    created_relative = '0:0:0:0'
+    if s.created:
+        now = datetime.now(timezone.utc)
+        created = s.created
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+
+        difference = now - created
+        days = difference.days
+        months = days // 30
+        rem_days = days % 30
+        total_seconds = int(difference.total_seconds())
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+
+        created_relative = f'{months}:{rem_days}:{hours}:{minutes}'
+
+    # Map the word object
+    word_obj = getattr(s, 'word', None)
+    if not word_obj:
+        raise ValueError(f'Word not loaded for suggestion {s.id}')
+
+    word_dto = _map_word_to_word_list_with_author(word_obj, user_id)
+
     return CollectionSuggestedWordOut(
         id=s.id,
-        word_id=s.word_id,
-        collection_id=s.collection_id,
-        user_id=s.user_id,
+        word=word_dto,
         status=s.status,
         created=s.created,
+        created_relative=created_relative,
     )
 
 
@@ -2063,11 +2818,32 @@ async def published_collection_suggested_words_list_service(
     if not _can_view(coll.read_access_level, user_id, coll.author_id, friend_ids):
         raise HTTPException(status_code=404, detail='Collection not available')
 
+    # Only return PENDING suggestions (for the author)
     page, limit, offset = normalize_pagination(page, limit)
+    Word = models['Word']
+    FavoriteWord = models['FavoriteWord']
+    WordTranslations = models['WordTranslations']
+    WordImageAssociations = models['WordImageAssociations']
+
     stmt = (
         select(Suggested)
-        .where(Suggested.collection_id == collection_id)
+        .where(
+            Suggested.collection_id == collection_id,
+            Suggested.status == RequestStatusEnum.PENDING,
+        )
         .order_by(Suggested.created.desc())
+        .options(
+            selectinload(Suggested.word).selectinload(Word.tags),
+            selectinload(Suggested.word).selectinload(Word.types),
+            selectinload(Suggested.word).selectinload(Word.language),
+            selectinload(Suggested.word).selectinload(Word.author),
+            selectinload(Suggested.word)
+            .selectinload(Word.wordtranslations)
+            .selectinload(WordTranslations.translation),
+            selectinload(Suggested.word)
+            .selectinload(Word.wordimageassociations)
+            .selectinload(WordImageAssociations.image),
+        )
     )
     total = (
         await session.execute(select(func.count()).select_from(stmt.subquery()))
@@ -2075,9 +2851,42 @@ async def published_collection_suggested_words_list_service(
     rows: Sequence = (
         (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
     )
-    results = [_map_suggested_word(s) for s in rows]
+
+    # Get favorite word IDs for the user
+    fav_ids: set[UUID] = set()
+    if rows:
+        word_ids = [s.word_id for s in rows if hasattr(s, 'word') and s.word]
+        if word_ids:
+            fav_ids = set(
+                (
+                    await session.execute(
+                        select(FavoriteWord.word_id).where(
+                            FavoriteWord.user_id == user_id,
+                            FavoriteWord.word_id.in_(word_ids),
+                        )
+                    )
+                ).scalars()
+            )
+
+    # Set favorite flag on words
+    for s in rows:
+        if hasattr(s, 'word') and s.word:
+            s.word._favorite = s.word.id in fav_ids
+
+    results = [_map_suggested_word(s, user_id) for s in rows]
+
+    # Build pagination links
+    from api.v1.utils.pagination import build_pagination_links
+
+    next_link, previous_link = build_pagination_links(
+        base_url=f'/published/collections/{collection_id}/suggested-words',
+        page=page,
+        limit=limit,
+        total=total,
+    )
+
     return CollectionSuggestedWordsPageOut(
-        page=page, limit=limit, count=total, results=results
+        count=total, next=next_link, previous=previous_link, results=results
     )
 
 
@@ -2152,6 +2961,7 @@ async def _update_suggestions_status(
 ) -> CollectionSuggestedWordsPageOut:
     Collection = models['Collection']
     Suggested = models['WordsSuggestedToCollections']
+    WordsInCollections = models['WordsInCollections']
 
     coll = (
         await session.execute(select(Collection).where(Collection.id == collection_id))
@@ -2161,6 +2971,7 @@ async def _update_suggestions_status(
     if coll.author_id != user_id:
         raise HTTPException(status_code=403, detail='Forbidden')
 
+    # Update status
     await session.execute(
         Suggested.__table__.update()
         .where(
@@ -2169,6 +2980,42 @@ async def _update_suggestions_status(
         )
         .values(status=new_status)
     )
+
+    # If accepting, add words to the collection
+    if new_status == RequestStatusEnum.APPROVED:
+        # Check which words are not already in the collection
+        existing_pairs = set(
+            (
+                await session.execute(
+                    select(
+                        WordsInCollections.word_id, WordsInCollections.collection_id
+                    ).where(
+                        WordsInCollections.collection_id == collection_id,
+                        WordsInCollections.word_id.in_(word_ids),
+                    )
+                )
+            ).all()
+        )
+
+        for wid in word_ids:
+            if (wid, collection_id) not in existing_pairs:
+                session.add(
+                    WordsInCollections(word_id=wid, collection_id=collection_id)
+                )
+
+        # Send Celery task for subscription updates
+        from core.celery.app import celery_app
+        from tasks.constants import UPDATE_COLLECTION_SUBSCRIPTION_INFO
+
+        celery_app.send_task(
+            UPDATE_COLLECTION_SUBSCRIPTION_INFO,
+            args=[
+                str(collection_id),
+                {'new_words': [str(wid) for wid in word_ids]},
+                None,
+            ],
+        )
+
     await session.commit()
     return await published_collection_suggested_words_list_service(
         session=session, user_id=user_id, collection_id=collection_id, page=1, limit=100
@@ -2227,12 +3074,19 @@ async def published_collection_suggested_words_destroy_service(
     ).scalar_one_or_none()
     if not coll:
         raise HTTPException(status_code=404, detail='Collection not found')
-    if coll.author_id != user_id:
-        raise HTTPException(status_code=403, detail='Forbidden')
 
+    # In DRF: collection author cannot delete suggestions, only the user who suggested can
+    if coll.author_id == user_id:
+        raise HTTPException(
+            status_code=403, detail='Collection author cannot delete suggestions'
+        )
+
+    # Only delete suggestions that belong to this user
     await session.execute(
         Suggested.__table__.delete().where(
-            Suggested.collection_id == collection_id, Suggested.word_id.in_(word_ids)
+            Suggested.collection_id == collection_id,
+            Suggested.word_id.in_(word_ids),
+            Suggested.user_id == user_id,  # Only delete user's own suggestions
         )
     )
     await session.commit()
@@ -2288,36 +3142,306 @@ async def published_collection_borrow_service(
     models: dict = VOCAB_MODELS,
 ) -> dict:
     Collection = models['Collection']
+    Word = models['Word']
     WordsInCollections = models['WordsInCollections']
+    WordTranslations = models['WordTranslations']
+    WordDefinitions = models['WordDefinitions']
+    WordUsageExamples = models['WordUsageExamples']
+    WordImageAssociations = models['WordImageAssociations']
 
+    # Load source collection with words
     src = (
         await session.execute(
             select(Collection)
-            .options(selectinload(Collection.words_in_collections))
+            .options(
+                selectinload(Collection.words_in_collections).selectinload(
+                    WordsInCollections.word
+                )
+            )
             .where(Collection.id == collection_id)
         )
     ).scalar_one_or_none()
     if not src:
         raise HTTPException(status_code=404, detail='Collection not found')
 
+    # Cache primitive fields BEFORE starting transaction work so we don't
+    # touch an expired `src` inside exception handlers.
+    src_title = src.title
+
+    # Step 1: Borrow all words in the collection
+    # For each word, create a copy or use existing if it already exists
+    borrowed_word_ids = []
+
+    for wic in src.words_in_collections or []:
+        src_word = wic.word
+        if not src_word:
+            continue
+
+        # Cache primitive values
+        src_word_text = src_word.text
+        src_word_language_id = src_word.language_id
+
+        # Check if word already exists in user's vocabulary
+        existing_word = (
+            await session.execute(
+                select(Word).where(
+                    Word.text == src_word_text,
+                    Word.author_id == user_id,
+                    Word.language_id == src_word_language_id,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if existing_word:
+            # Use existing word
+            borrowed_word_ids.append(existing_word.id)
+        else:
+            # Create a new borrowed word copy
+            new_word = Word(
+                text=src_word_text,
+                language_id=src_word_language_id,
+                author_id=user_id,
+                source_word_id=src_word.id,
+                is_premium=False,
+                activity_status=ActivityStatusEnum.INACTIVE,
+                activity_progress=ActivityStatusEnum.activity_progress_default,
+                read_access_level=AccessLevelsEnum.PRIVATE,
+                add_access_level=AccessLevelsEnum.PRIVATE,
+                allow_access_change=False,
+            )
+
+            try:
+                session.add(new_word)
+                await session.flush()
+                word_id = new_word.id
+
+                # Copy translations associations
+                src_translations = (
+                    await session.execute(
+                        select(WordTranslations.translation_id).where(
+                            WordTranslations.word_id == src_word.id
+                        )
+                    )
+                ).scalars()
+                for tr_id in src_translations:
+                    session.add(WordTranslations(word_id=word_id, translation_id=tr_id))
+
+                # Copy definitions associations
+                src_definitions = (
+                    await session.execute(
+                        select(WordDefinitions.definition_id).where(
+                            WordDefinitions.word_id == src_word.id
+                        )
+                    )
+                ).scalars()
+                for def_id in src_definitions:
+                    session.add(WordDefinitions(word_id=word_id, definition_id=def_id))
+
+                # Copy usage examples associations
+                src_examples = (
+                    await session.execute(
+                        select(WordUsageExamples.example_id).where(
+                            WordUsageExamples.word_id == src_word.id
+                        )
+                    )
+                ).scalars()
+                for ex_id in src_examples:
+                    session.add(WordUsageExamples(word_id=word_id, example_id=ex_id))
+
+                # Copy image associations
+                src_images = (
+                    await session.execute(
+                        select(WordImageAssociations.image_id).where(
+                            WordImageAssociations.word_id == src_word.id
+                        )
+                    )
+                ).scalars()
+                for img_id in src_images:
+                    session.add(WordImageAssociations(word_id=word_id, image_id=img_id))
+
+                borrowed_word_ids.append(word_id)
+            except IntegrityError as word_exc:
+                # Word might have been created concurrently between our check and insert
+                # Remove the failed object from session and query for existing word
+                session.expunge(new_word)
+
+                # Check if it's a unique violation
+                error_msg = (
+                    str(word_exc.orig) if hasattr(word_exc, 'orig') else str(word_exc)
+                )
+                is_unique_violation = (
+                    'unique_words_in_user_voc' in error_msg
+                    or 'unique' in error_msg.lower()
+                    or 'duplicate' in error_msg.lower()
+                    or (
+                        hasattr(word_exc, 'orig')
+                        and isinstance(word_exc.orig, UniqueViolationError)
+                    )
+                )
+
+                if is_unique_violation:
+                    # Re-query for existing word (it was created concurrently)
+                    existing_word = (
+                        await session.execute(
+                            select(Word).where(
+                                Word.text == src_word_text,
+                                Word.author_id == user_id,
+                                Word.language_id == src_word_language_id,
+                            )
+                        )
+                    ).scalar_one_or_none()
+
+                    if existing_word:
+                        borrowed_word_ids.append(existing_word.id)
+                    else:
+                        # Word exists but we can't load it - skip this word and continue
+                        # This is a rare race condition, but we should handle it gracefully
+                        continue
+                else:
+                    # If it's not a unique violation, we need to rollback and re-raise
+                    # This will lose all words created so far, but it's necessary for data integrity
+                    await session.rollback()
+                    raise
+
+    # Step 2: Create the collection with allow_access_change=False
     new_coll = Collection(
-        title=src.title,
+        title=src_title,
         description=src.description,
         author_id=user_id,
         source_collection_id=src.id,
         allow_comments=src.allow_comments,
         allow_suggestions=src.allow_suggestions,
         allow_suggestions_notifications=src.allow_suggestions_notifications,
+        # Borrowed collections must start as private and immutable
+        read_access_level=AccessLevelsEnum.PRIVATE,
+        add_access_level=AccessLevelsEnum.PRIVATE,
+        allow_access_change=False,
     )
-    session.add(new_coll)
-    await session.flush()
 
-    for wic in src.words_in_collections or []:
-        session.add(WordsInCollections(collection_id=new_coll.id, word_id=wic.word_id))
+    try:
+        session.add(new_coll)
+        try:
+            await session.flush()
+        except IntegrityError as flush_exc:
+            await session.rollback()
+            # In borrow context, any IntegrityError is likely a unique constraint violation
+            # Check error message or constraint name
+            error_msg = (
+                str(flush_exc.orig) if hasattr(flush_exc, 'orig') else str(flush_exc)
+            )
+            is_unique_violation = (
+                'unique_user_collection' in error_msg
+                or 'unique' in error_msg.lower()
+                or 'duplicate' in error_msg.lower()
+                or (
+                    hasattr(flush_exc, 'orig')
+                    and isinstance(flush_exc.orig, UniqueViolationError)
+                )
+            )
 
-    await session.commit()
-    await session.refresh(new_coll)
-    return map_collection(new_coll, include_words=True)
+            if is_unique_violation:
+                # Find the existing collection and raise HTTPException
+                existing_coll = (
+                    await session.execute(
+                        select(Collection)
+                        .options(selectinload(Collection.words_in_collections))
+                        .where(
+                            func.lower(Collection.title) == func.lower(src_title),
+                            Collection.author_id == user_id,
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                if existing_coll:
+                    existing_coll_dto = map_collection(
+                        existing_coll, include_words=False, for_published=True
+                    )
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            'exception_code': 'already_exist',
+                            'detail': 'Collection already exists in your vocabulary',
+                            'existing_object': existing_coll_dto.model_dump(
+                                mode='json'
+                            ),
+                        },
+                    ) from flush_exc
+                else:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            'exception_code': 'already_exist',
+                            'detail': 'Collection already exists in your vocabulary',
+                        },
+                    ) from flush_exc
+            raise
+
+        # Step 3: Link the borrowed words to the new collection
+        for word_id in borrowed_word_ids:
+            session.add(WordsInCollections(collection_id=new_coll.id, word_id=word_id))
+
+        await session.commit()
+    except IntegrityError as exc:
+        # Any integrity error here means the collection already exists for this user
+        await session.rollback()
+
+        # Check error message or constraint name
+        error_msg = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
+        is_unique_violation = (
+            'unique_user_collection' in error_msg
+            or 'unique' in error_msg.lower()
+            or 'duplicate' in error_msg.lower()
+            or (hasattr(exc, 'orig') and isinstance(exc.orig, UniqueViolationError))
+        )
+
+        if is_unique_violation:
+            # Find the existing collection with same title (case-insensitive) and author
+            existing_coll = (
+                await session.execute(
+                    select(Collection)
+                    .options(selectinload(Collection.words_in_collections))
+                    .where(
+                        func.lower(Collection.title) == func.lower(src_title),
+                        Collection.author_id == user_id,
+                    )
+                )
+            ).scalar_one_or_none()
+
+            if existing_coll:
+                existing_coll_dto = map_collection(
+                    existing_coll, include_words=False, for_published=True
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        'exception_code': 'already_exist',
+                        'detail': 'Collection already exists in your vocabulary',
+                        'existing_object': existing_coll_dto.model_dump(mode='json'),
+                    },
+                ) from exc
+            else:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        'exception_code': 'already_exist',
+                        'detail': 'Collection already exists in your vocabulary',
+                    },
+                ) from exc
+        raise
+
+    # Reload the collection with words_in_collections and author eagerly loaded to avoid MissingGreenlet error
+    new_coll = (
+        await session.execute(
+            select(Collection)
+            .options(
+                selectinload(Collection.words_in_collections),
+                selectinload(Collection.author),
+            )
+            .where(Collection.id == new_coll.id)
+        )
+    ).scalar_one()
+
+    return map_collection(new_coll, include_words=True, for_published=True)
 
 
 async def published_collection_favorite_toggle_service(
@@ -2333,7 +3457,7 @@ async def published_collection_favorite_toggle_service(
     if not src:
         raise HTTPException(status_code=404, detail='Collection not found')
     return await collection_favorite_toggle_service(
-        session=session, user_id=user_id, collection_id=src.id
+        session=session, user_id=user_id, collection_id=src.id, author_only=False
     )
 
 
@@ -2632,7 +3756,7 @@ async def published_examples_list_service(
                 text=r.text,
                 translation=r.translation,
                 language=getattr(r.language, 'isocode', None),
-                source=r.source,
+                source=r.source or 'OTH',
                 source_name=r.source_name,
                 source_url=r.source_url,
                 other_words_count=other_words_count,

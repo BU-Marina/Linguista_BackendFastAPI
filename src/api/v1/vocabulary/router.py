@@ -1,14 +1,16 @@
 """Vocabulary api endpoints (simplified)."""
 
-from fastapi import APIRouter, Depends, Query, Body
+from fastapi import APIRouter, Depends, Query, Body, Header
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.db import get_async_session
 from auth.setup import current_user
+from api.v1.core_schemas import FavoriteToggleOut
 
 from .schemas import (
     WordIn,
+    WordInPartial,
     WordReadOut,
     SynonymReadOut,
     PageOut,
@@ -22,9 +24,8 @@ from .schemas import (
     WordsIdsIn,
     WordAccessLevelUpdateIn,
 )
-from .params import (
-    build_words_list_params,
-)
+from .params import build_words_list_params
+from core.utils.i18n import parse_accept_language
 from .services import (
     words_list_service,
     word_create_service,
@@ -51,6 +52,7 @@ from .services import (
     words_set_access_level_service,
     word_allow_comments_switch_service,
     words_random_service,
+    collection_words_list_service,
 )
 
 router = APIRouter(prefix='/vocabulary', tags=['vocabulary'])
@@ -108,6 +110,7 @@ async def words_list(
     synonyms_count_lt: int | None = Query(None, alias='synonyms_count__lt'),
     # Favorite
     favorite_only: bool = Query(False),
+    accept_language: str | None = Header(None),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
@@ -162,16 +165,51 @@ async def words_list(
         # Favorite
         favorite_only=favorite_only,
     )
-    return await words_list_service(session=session, user_id=user.id, params=params)
+    lang = parse_accept_language(accept_language)
+    return await words_list_service(
+        session=session, user_id=user.id, params=params, lang=lang
+    )
+
+
+@router.get('/collection-words/{collection_id}', response_model=PageOut)
+async def collection_words_list(
+    collection_id: UUID,
+    # Pagination
+    page: int = Query(1, ge=1),
+    limit: int = Query(32, ge=1, le=500),
+    ordering: str | None = Query(None),
+    search: str | None = Query(None),
+    session: AsyncSession = Depends(get_async_session),
+    user=Depends(current_user),
+):
+    """
+    Return all words in a given collection, regardless of author.
+    Used for collection profile to show accepted suggested words from other authors.
+    """
+    params = build_words_list_params(
+        page=page,
+        limit=limit,
+        ordering=ordering,
+        search=search,
+        # Pass as CSV string so build_words_list_params / parse_csv works correctly
+        collections=str(collection_id),
+    )
+    return await collection_words_list_service(
+        session=session, user_id=user.id, params=params
+    )
 
 
 @router.post('/words', response_model=WordReadOut)
 async def word_create(
     payload: WordIn,
+    accept_language: str | None = Header(None),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
-    return await word_create_service(session=session, user_id=user.id, payload=payload)
+    lang = parse_accept_language(accept_language)
+    return await word_create_service(
+        session=session, user_id=user.id, payload=payload, lang=lang
+    )
 
 
 @router.post('/multiple-create', response_model=MultipleWordsCreateOut)
@@ -216,11 +254,13 @@ async def word_resolve_slug(
 @router.get('/words/{word_id}', response_model=WordReadOut)
 async def word_retrieve(
     word_id: UUID,
+    accept_language: str | None = Header(None),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
+    lang = parse_accept_language(accept_language)
     return await word_retrieve_service(
-        session=session, user_id=user.id, word_id=word_id
+        session=session, user_id=user.id, word_id=word_id, lang=lang
     )
 
 
@@ -238,12 +278,14 @@ async def synonym_retrieve(
 @router.patch('/words/{word_id}', response_model=WordReadOut)
 async def word_update(
     word_id: UUID,
-    payload: WordIn,
+    payload: WordInPartial,
+    accept_language: str | None = Header(None),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
+    lang = parse_accept_language(accept_language)
     return await word_update_service(
-        session=session, user_id=user.id, word_id=word_id, payload=payload
+        session=session, user_id=user.id, word_id=word_id, payload=payload, lang=lang
     )
 
 
@@ -251,11 +293,13 @@ async def word_update(
 async def word_add_to_collections(
     word_id: UUID,
     payload: WordCollectionsIn,
+    accept_language: str | None = Header(None),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
+    lang = parse_accept_language(accept_language)
     return await word_add_to_collections_service(
-        session=session, user_id=user.id, word_id=word_id, payload=payload
+        session=session, user_id=user.id, word_id=word_id, payload=payload, lang=lang
     )
 
 
@@ -268,7 +312,7 @@ async def word_delete(
     await word_delete_service(session=session, user_id=user.id, word_id=word_id)
 
 
-@router.post('/words/{word_id}/favorite', response_model=WordReadOut)
+@router.post('/words/{word_id}/favorite', response_model=FavoriteToggleOut)
 async def word_favorite_toggle(
     word_id: UUID,
     session: AsyncSession = Depends(get_async_session),
@@ -282,11 +326,13 @@ async def word_favorite_toggle(
 @router.post('/words/{word_id}/allow-comments-switch', response_model=WordReadOut)
 async def word_allow_comments_switch(
     word_id: UUID,
+    accept_language: str | None = Header(None),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
+    lang = parse_accept_language(accept_language)
     return await word_allow_comments_switch_service(
-        session=session, user_id=user.id, word_id=word_id
+        session=session, user_id=user.id, word_id=word_id, lang=lang
     )
 
 
@@ -304,8 +350,10 @@ async def tags_list(
 @router.get('/types', response_model=list[TypeOut])
 async def types_list(
     session: AsyncSession = Depends(get_async_session),
+    accept_language: str | None = Header(None),
 ):
-    return await types_list_service(session=session)
+    lang = parse_accept_language(accept_language)
+    return await types_list_service(session=session, lang=lang)
 
 
 @router.get('/words/random', response_model=PageOut)
@@ -320,11 +368,13 @@ async def words_random(
 @router.post('/words/data-to-update', response_model=list[WordReadOut])
 async def words_data_to_update(
     payload: WordsIdsIn,
+    accept_language: str | None = Header(None),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
+    lang = parse_accept_language(accept_language)
     return await words_data_to_update_service(
-        session=session, user_id=user.id, payload=payload
+        session=session, user_id=user.id, payload=payload, lang=lang
     )
 
 

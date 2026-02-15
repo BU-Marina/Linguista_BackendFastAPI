@@ -22,7 +22,7 @@ from .params import build_users_list_params
 from .services import (
     add_to_friends_service,
     buddies_list_service,
-    enable_notifications_service,
+    toggle_notifications_service,
     friend_request_response_service,
     friend_requests_list_service,
     friends_list_service,
@@ -132,31 +132,16 @@ async def subscribe_toggle(
     )
 
 
-@router.post('/{slug}/allow-notifications', response_model=EnableNotificationsOut)
-async def enable_notifications(
+@router.post('/{slug}/toggle-notifications', response_model=EnableNotificationsOut)
+async def toggle_notifications(
     slug: str,
     session: AsyncSession = Depends(get_async_session),
     request_user=Depends(current_user),
 ):
-    return await enable_notifications_service(
+    return await toggle_notifications_service(
         session=session,
         actor_id=request_user.id,
         target_slug=slug,
-        enable=True,
-    )
-
-
-@router.delete('/{slug}/allow-notifications', response_model=EnableNotificationsOut)
-async def disable_notifications(
-    slug: str,
-    session: AsyncSession = Depends(get_async_session),
-    request_user=Depends(current_user),
-):
-    return await enable_notifications_service(
-        session=session,
-        actor_id=request_user.id,
-        target_slug=slug,
-        enable=False,
     )
 
 

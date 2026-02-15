@@ -84,7 +84,9 @@ class AmountLimits:
         MAX_LEARNING_LANGUAGES_AMOUNT = 5
 
         class Details:
-            LEARNING_LANGUAGES_AMOUNT_EXCEEDED = 'Learning languages amount limit exceeded'
+            LEARNING_LANGUAGES_AMOUNT_EXCEEDED = (
+                'Learning languages amount limit exceeded'
+            )
             NATIVE_LANGUAGES_AMOUNT_EXCEEDED = 'Native languages amount limit exceeded'
 
     class Exercises:
@@ -97,7 +99,9 @@ class AmountLimits:
 
         class Details:
             WORDS_AMOUNT_EXCEEDED = 'Words amount limit exceeded for this exercise'
-            WORD_SETS_AMOUNT_EXCEEDED = 'Word sets amount limit exceeded for this exercise'
+            WORD_SETS_AMOUNT_EXCEEDED = (
+                'Word sets amount limit exceeded for this exercise'
+            )
             MAX_ANSWER_TIME_EXCEEDED = 'Maximum time limit exceeded'
             MIN_ANSWER_TIME_EXCEEDED = 'Minimum time limit exceeded'
             MAX_REPETITIONS_LIMIT_EXCEEDED = 'Maximum repetitions amount limit exceeded'
@@ -116,6 +120,8 @@ class ActivityStatusEnum:
     )
 
     max_length = 1
+
+    activity_progress_default = 0
 
 
 class LanguageLevelEnum:

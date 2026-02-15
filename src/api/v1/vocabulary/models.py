@@ -20,6 +20,9 @@ from apps.vocabulary.models import (
     ImageAssociation,
     WordImageAssociations,
     CollectionSubscription,
+    CollectionComment,
+    WordComment,
+    WordsSuggestedToCollections,
 )
 from apps.languages.models import Language
 from apps.core.models import Tag
@@ -45,5 +48,8 @@ VOCAB_MODELS = {
     'ImageAssociation': ImageAssociation,
     'WordImageAssociations': WordImageAssociations,
     'CollectionSubscription': CollectionSubscription,
+    'CollectionComment': CollectionComment,
+    'WordComment': WordComment,
+    'WordsSuggestedToCollections': WordsSuggestedToCollections,
     'Language': Language,
 }

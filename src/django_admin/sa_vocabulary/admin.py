@@ -147,7 +147,7 @@ class WordTypeAdmin(I18nTabbedAdmin):
             {
                 'fields': (
                     'slug',
-                    'words_count',
+                    # 'words_count',
                 )
             },
         ),
@@ -157,10 +157,19 @@ class WordTypeAdmin(I18nTabbedAdmin):
     list_display = ('name', 'slug', 'words_count')
     list_display_links = ('name',)
     search_fields = ('name',)
+    readonly_fields = ('created', 'modified')
 
     @admin.display(description='Name')
     def name(self, obj: SaWordType) -> str:
         return obj.name_en or obj.name_ru or ''
+
+    def save_model(self, request, obj, form, change):
+        """Preserve created timestamp when updating."""
+        if change and obj.pk:
+            # When updating, preserve the original created timestamp
+            original = SaWordType.objects.get(pk=obj.pk)
+            obj.created = original.created
+        super().save_model(request, obj, form, change)
 
 
 class CollectionWordInLine(admin.TabularInline):
@@ -193,6 +202,7 @@ class WordTranslationAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ('text', 'author')}
     list_display = ('slug', 'text', 'language', 'words_count')
     list_display_links = ('slug',)
+    search_fields = ('text', 'author__username', 'id')
 
 
 @admin.register(SaUsageExample)

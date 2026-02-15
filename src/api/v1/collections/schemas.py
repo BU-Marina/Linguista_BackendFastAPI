@@ -52,16 +52,46 @@ class CollectionShortOut(BaseModel):
     modified: Optional[datetime] = None
 
 
-class CollectionIn(BaseModel):
+class SourceCollectionOut(BaseModel):
+    """Source collection info when collection is borrowed."""
+
+    id: UUID
+    slug: str
     title: str
-    description: Optional[str] = None
-    allow_comments: Optional[bool] = True
-    allow_suggestions: Optional[bool] = True
-    allow_suggestions_notifications: Optional[bool] = True
+    author: Optional[AuthorShortOut] = None
 
 
 class CollectionReadOut(CollectionShortOut):
-    pass
+    # In profile responses we always return full author info
+    author: AuthorShortOut
+    source_collection: Optional[SourceCollectionOut] = None
+    words_translations_count: int = 0
+    words_images_count: int = 0
+    words_definitions_count: int = 0
+    words_examples_count: int = 0
+    allow_comments: bool = True
+    allow_suggestions: bool = True
+    allow_suggestions_notifications: bool = True
+    comments_count: int = 0
+    comments: list['CollectionCommentOut'] = []
+    favorite_for_amount: int = 0
+    views_amount: int = 0
+    borrowings_amount: int = 0
+    borrowed: bool = False
+    words_images: list[str] = Field(default_factory=list)
+    words_texts: dict[str, list[str]] = Field(default_factory=dict)
+    subscribers_count: int = 0
+
+
+class CollectionIn(BaseModel):
+    title: str
+    description: Optional[str] = None
+    words: Optional[List[UUID]] = None  # Word IDs
+    allow_comments: Optional[bool] = True
+    allow_suggestions: Optional[bool] = True
+    allow_suggestions_notifications: Optional[bool] = True
+    read_access_level: Optional[str] = None
+    add_access_level: Optional[str] = None
 
 
 class PageOut(BaseModel):
@@ -76,6 +106,32 @@ class PageOut(BaseModel):
 class CollectionResolveOut(BaseModel):
     id: UUID
     slug: str
+
+
+class CollectionCommentIn(BaseModel):
+    text: str
+
+
+class CollectionCommentOut(BaseModel):
+    id: UUID
+    collection: str  # collection slug
+    author: AuthorShortOut
+    text: str
+    author_liked: bool = False
+    liked_by_user: bool = False
+    disliked_by_user: bool = False
+    likes_count: int = 0
+    dislikes_count: int = 0
+    answers_count: int = 0
+    modified_relative: str = ''
+    text_modified: bool = False
+
+
+class CollectionCommentsPageOut(BaseModel):
+    count: int
+    next: str | None = None
+    previous: str | None = None
+    results: List[CollectionCommentOut]
 
 
 class CollectionSubscriptionDetailOut(BaseModel):

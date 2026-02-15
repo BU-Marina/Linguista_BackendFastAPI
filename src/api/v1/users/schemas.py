@@ -110,12 +110,14 @@ class SubscriptionToggleOut(BaseModel):
     """Response for subscribe/unsubscribe toggles."""
 
     is_subscribed: bool
+    subscribers_count: int
 
 
 class EnableNotificationsOut(BaseModel):
     """Response for notifications toggle."""
 
     enable_notifications: bool
+    subscribers_count: int
 
 
 class FriendRequestSentOut(BaseModel):

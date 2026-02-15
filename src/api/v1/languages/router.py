@@ -142,6 +142,7 @@ async def global_languages(
     ordering: str | None = Query(None),
     search: str | None = Query(None),
     session: AsyncSession = Depends(get_async_session),
+    accept_language: str | None = Header(None),
 ):
     params = build_languages_list_params(
         page=page, limit=limit, ordering=ordering, search=search
@@ -149,6 +150,7 @@ async def global_languages(
     return await global_languages_list_service(
         session=session,
         params=params,
+        lang=parse_accept_language(accept_language),
     )
 
 
@@ -163,6 +165,7 @@ async def interface_languages(
     ordering: str | None = Query(None),
     search: str | None = Query(None),
     session: AsyncSession = Depends(get_async_session),
+    accept_language: str | None = Header(None),
 ):
     params = build_languages_list_params(
         page=page, limit=limit, ordering=ordering, search=search
@@ -170,6 +173,7 @@ async def interface_languages(
     return await interface_languages_list_service(
         session=session,
         params=params,
+        lang=parse_accept_language(accept_language),
     )
 
 

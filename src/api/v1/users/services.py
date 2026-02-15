@@ -375,28 +375,40 @@ async def subscribe_toggle_service(
             )
         )
         await session.commit()
-        return SubscriptionToggleOut(is_subscribed=False)
+        is_subscribed = False
+    else:
+        try:
+            session.add(Subscription(subscriber_id=actor_id, user_id=target_id))
+            await session.commit()
+            is_subscribed = True
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(status_code=409, detail='Already subscribed') from exc
 
-    try:
-        session.add(Subscription(subscriber_id=actor_id, user_id=target_id))
-        await session.commit()
-    except IntegrityError as exc:
-        await session.rollback()
-        raise HTTPException(status_code=409, detail='Already subscribed') from exc
+    # Return up-to-date subscribers_count for the target user
+    subscribers_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(Subscription)
+            .where(Subscription.user_id == target_id)
+        )
+    ).scalar_one()
 
-    return SubscriptionToggleOut(is_subscribed=True)
+    return SubscriptionToggleOut(
+        is_subscribed=is_subscribed,
+        subscribers_count=subscribers_count,
+    )
 
 
 def _ordered_pair(a: UUID, b: UUID) -> tuple[UUID, UUID]:
     return (a, b) if a < b else (b, a)
 
 
-async def enable_notifications_service(
+async def toggle_notifications_service(
     *,
     session: AsyncSession,
     actor_id: UUID,
     target_slug: str,
-    enable: bool,
     models: dict = USER_MODELS,
 ) -> EnableNotificationsOut:
     """Turn notifications on/off for a subscription."""
@@ -420,9 +432,23 @@ async def enable_notifications_service(
             status_code=409, detail='You are not subscribed to this user'
         )
 
-    subscription.enable_notifications = enable
+    subscription.enable_notifications = not subscription.enable_notifications
     await session.commit()
-    return EnableNotificationsOut(enable_notifications=bool(enable))
+
+    # subscribers_count does not change when only notifications are toggled,
+    # but we still return the current count for convenience/consistency.
+    subscribers_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(Subscription)
+            .where(Subscription.user_id == target_id)
+        )
+    ).scalar_one()
+
+    return EnableNotificationsOut(
+        enable_notifications=bool(subscription.enable_notifications),
+        subscribers_count=subscribers_count,
+    )
 
 
 async def subscriptions_list_service(

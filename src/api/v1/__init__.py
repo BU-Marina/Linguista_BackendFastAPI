@@ -10,5 +10,7 @@ from .usage_examples import router as usage_examples_router  # noqa: F401
 from .image_associations import router as image_associations_router  # noqa: F401
 from .published import router as published_router  # noqa: F401
 from .exercises import router as exercises_router  # noqa: F401
+from .exercises.ws import ws_router as ws_exercises_router  # noqa: F401
 from .notifications import router as notifications_router  # noqa: F401
+from .notifications import ws_router as ws_notifications_router  # noqa: F401
 from .unsplash import router as unsplash_router  # noqa: F401

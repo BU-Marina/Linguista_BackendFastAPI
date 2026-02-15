@@ -16,6 +16,8 @@ from .v1 import (
     published_router,
     exercises_router,
     notifications_router,
+    ws_notifications_router,
+    ws_exercises_router,
     unsplash_router,
 )
 
@@ -34,4 +36,6 @@ main_router.include_router(image_associations_router)
 main_router.include_router(published_router)
 main_router.include_router(exercises_router)
 main_router.include_router(notifications_router)
+main_router.include_router(ws_notifications_router)
+main_router.include_router(ws_exercises_router)
 main_router.include_router(unsplash_router)

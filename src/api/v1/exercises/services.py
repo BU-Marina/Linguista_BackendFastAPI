@@ -18,6 +18,12 @@ from api.v1.languages.models import LANGUAGE_MODELS
 from core.celery.app import celery_app
 from tasks.constants import DELETE_PREVIOUS_EX_CONF
 from core.utils.i18n import i18n_get
+from apps.exercises.constants import (
+    ExercisesInputModeEnum,
+    TimeLimitModeEnum,
+    TranslationsModeEnum,
+    DefinitionsModeEnum,
+)
 from .models import EXERCISE_MODELS
 from .schemas import (
     ExerciseListOut,
@@ -28,6 +34,7 @@ from .schemas import (
     WordsSetOut,
     PageOut,
     ExerciseDetailOut as ExerciseDetailSchema,
+    HintOut,
 )
 from apps.exercises.constants import exercises_lookups
 
@@ -42,6 +49,14 @@ def _exercise_description(ex, lang: str) -> str | None:
 
 def _exercise_constraint_description(ex, lang: str) -> str | None:
     return i18n_get(ex, 'constraint_description', lang)
+
+
+def _hint_name(hint, lang: str) -> str:
+    return i18n_get(hint, 'name', lang)
+
+
+def _hint_description(hint, lang: str) -> str:
+    return i18n_get(hint, 'description', lang)
 
 
 async def exercises_list_service(
@@ -82,7 +97,18 @@ async def exercises_list_service(
             icon=ex.icon,
             available=ex.available,
             favorite=ex.favorite,
-            hints_available=[h.id for h in ex.hints_available],
+            hints_available=[
+                HintOut(
+                    id=h.id,
+                    name=_hint_name(h, lang),
+                    description=_hint_description(h, lang),
+                    code=h.code,
+                    variants_mode=h.variants_mode,
+                    free_input_mode=h.free_input_mode,
+                    word_customization_content_needed=h.word_customization_content_needed,
+                )
+                for h in ex.hints_available
+            ],
             created=ex.created,
             modified=ex.modified,
         )
@@ -131,7 +157,18 @@ async def exercises_favorites_list_service(
             icon=ex.icon,
             available=ex.available,
             favorite=True,
-            hints_available=[h.id for h in ex.hints_available],
+            hints_available=[
+                HintOut(
+                    id=h.id,
+                    name=_hint_name(h, lang),
+                    description=_hint_description(h, lang),
+                    code=h.code,
+                    variants_mode=h.variants_mode,
+                    free_input_mode=h.free_input_mode,
+                    word_customization_content_needed=h.word_customization_content_needed,
+                )
+                for h in ex.hints_available
+            ],
             created=ex.created,
             modified=ex.modified,
         )
@@ -176,7 +213,18 @@ async def exercise_detail_service(
         icon=ex.icon,
         available=ex.available,
         favorite=ex.favorite,
-        hints_available=[h.id for h in ex.hints_available],
+        hints_available=[
+            HintOut(
+                id=h.id,
+                name=_hint_name(h, lang),
+                description=_hint_description(h, lang),
+                code=h.code,
+                variants_mode=h.variants_mode,
+                free_input_mode=h.free_input_mode,
+                word_customization_content_needed=h.word_customization_content_needed,
+            )
+            for h in ex.hints_available
+        ],
         created=ex.created,
         modified=ex.modified,
     )
@@ -334,31 +382,37 @@ async def exercise_configuration_create_service(
             .all()
         )
 
+    # Always create a new configuration (DRF parity); older defaults are
+    # cleaned up asynchronously by the Celery task.
     cfg = ExerciseConfiguration(
         author_id=user_id,
         exercise_id=ex.id,
+        input_mode=getattr(payload, 'input_mode', None)
+        or ExercisesInputModeEnum.FREE_INPUT,
         answer_time_limit=payload.answer_time_limit,
+        time_limit_mode=getattr(payload, 'time_limit_mode', None)
+        or TimeLimitModeEnum.ALL,
+        repetitions_amount=getattr(payload, 'repetitions_amount', None) or 1,
+        translations_mode=getattr(payload, 'translations_mode', None)
+        or TranslationsModeEnum.FROM_LEARNING,
+        definitions_mode=getattr(payload, 'definitions_mode', None)
+        or DefinitionsModeEnum.DEFINITION_BY_WORD,
         hints_use_amount=payload.hints_use_amount,
         is_default=payload.is_default,
+        words=words or [],
+        words_set=words_sets or [],
+        hints_available=hints or [],
     )
     session.add(cfg)
     await session.flush()
-
-    if words:
-        cfg.words = words
-    if words_sets:
-        cfg.words_set = words_sets
-    if hints:
-        cfg.hints_available = hints
-
-    await session.commit()
-    await session.refresh(cfg)
 
     if payload.is_default:
         celery_app.send_task(
             DELETE_PREVIOUS_EX_CONF,
             args=[str(cfg.id), str(user_id), str(ex.id), payload.is_default],
         )
+    await session.commit()
+    await session.refresh(cfg)
 
     return ExerciseConfigurationOut(
         id=cfg.id,
@@ -560,11 +614,13 @@ async def random_exercise_configuration_service(
 
 def _base_words_query(models):
     Word = models['Word']
+    WordTranslations = models['WordTranslations']
     return select(Word).options(
         selectinload(Word.tags),
         selectinload(Word.types),
-        selectinload(Word.translations),
         selectinload(Word.language),
+        # Eager-load translations via through model to match Published behavior
+        selectinload(Word.wordtranslations).selectinload(WordTranslations.translation),
     )
 
 
@@ -628,6 +684,15 @@ async def exercise_available_words_service(
     else:
         stmt = stmt.order_by(Word.created.desc())
     stmt = stmt.distinct()
+
+    # Paginate and map to vocabulary word DTOs
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+    rows = (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
+
+    results = [map_word(w) for w in rows]
+    return PageOut(page=page, limit=limit, count=total, results=results)
 
 
 async def exercise_last_approach_incorrects_service(

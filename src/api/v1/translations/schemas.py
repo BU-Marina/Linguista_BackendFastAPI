@@ -10,13 +10,10 @@ from pydantic import BaseModel, Field
 
 
 class TranslationIn(BaseModel):
+    id: Optional[UUID] = None  # If provided, update instead of create
     text: str
     language: Optional[str] = None
-
-
-class TranslationWordOut(BaseModel):
-    text: str
-    language__isocode: Optional[str] = None
+    words: Optional[List[UUID]] = None  # Word IDs to associate with this translation
 
 
 class TranslationOut(BaseModel):
@@ -24,8 +21,11 @@ class TranslationOut(BaseModel):
     slug: str
     text: str
     language: Optional[str] = None
+    words_count: int = 0
     other_words_count: int = 0
-    last_6_words: List[TranslationWordOut] = Field(default_factory=list)
+    # Last related words texts (for lists, latest 6 words from user's vocabulary;
+    # for word profile, typically includes at least the current word)
+    last_6_words: List[str] = Field(default_factory=list)
     created: Optional[datetime] = None
     modified: Optional[datetime] = None
 
@@ -36,6 +36,8 @@ class PageOut(BaseModel):
     page: int
     limit: int
     count: int
+    next: str | None = None
+    previous: str | None = None
     results: list
 
 

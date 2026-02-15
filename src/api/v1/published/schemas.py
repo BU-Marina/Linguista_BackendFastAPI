@@ -4,27 +4,23 @@ from __future__ import annotations
 
 from typing import List
 
-from api.v1.vocabulary.schemas import WordListOut, WordReadOut, PageOut as WordsPageBase
+from api.v1.vocabulary.schemas import WordListOut, WordListWithAuthorOut, WordReadOut
 from api.v1.collections.schemas import (
     CollectionShortOut,
-    CollectionReadOut,
     PageOut as CollectionsPageBase,
+    CollectionCommentOut,
 )
 from api.v1.translations.schemas import TranslationOut, PageOut as TranslationsPageBase
 from api.v1.definitions.schemas import DefinitionOut, PageOut as DefinitionsPageBase
 from api.v1.usage_examples.schemas import ExampleOut, PageOut as ExamplesPageBase
 from api.v1.image_associations.schemas import ImageOut, PageOut as ImagesPageBase
-from api.v1.vocabulary.schemas import PageOut as SynonymsPageBase
-from pydantic import BaseModel, field_validator
+from api.v1.vocabulary.schemas import PageOut as SynonymsPageBase, WordCommentOut
+from pydantic import BaseModel, field_validator, Field
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
 from core.constants import RequestStatusEnum
 from core.utils.urls import get_full_media_url
-
-
-class WordsPageOut(WordsPageBase):
-    results: List[WordListOut]
 
 
 class TranslationShortOut(BaseModel):
@@ -69,21 +65,6 @@ class AuthorOut(BaseModel):
         return get_full_media_url(v)
 
 
-class WordListWithAuthorOut(WordListOut):
-    author: AuthorShortOut | None = None
-    background_image_url: str | None = None
-    translations: list[TranslationShortOut] = []
-
-    @field_validator('background_image_url', mode='before')
-    @classmethod
-    def convert_background_image_url_to_full(cls, v):
-        return get_full_media_url(v)
-
-
-class WordsWithAuthorPageOut(WordsPageBase):
-    results: List[WordListWithAuthorOut]
-
-
 class CollectionsPageOut(CollectionsPageBase):
     results: List[CollectionShortOut]
 
@@ -108,51 +89,6 @@ class SynonymsPageOut(SynonymsPageBase):
     results: List[WordListOut]
 
 
-class CollectionCommentIn(BaseModel):
-    text: str
-
-
-class CollectionCommentOut(BaseModel):
-    id: UUID
-    collection_id: UUID
-    author_id: UUID
-    text: str
-    author_liked: bool = False
-    likes_count: int = 0
-    dislikes_count: int = 0
-    answers_count: int = 0
-    created: datetime | None = None
-    modified: datetime | None = None
-
-    model_config = {'from_attributes': True}
-
-
-class CollectionCommentsPageOut(BaseModel):
-    page: int
-    limit: int
-    count: int
-    results: List[CollectionCommentOut]
-
-
-class WordCommentIn(BaseModel):
-    text: str
-
-
-class WordCommentOut(BaseModel):
-    id: UUID
-    word_id: UUID
-    author_id: UUID
-    text: str
-    author_liked: bool = False
-    likes_count: int = 0
-    dislikes_count: int = 0
-    answers_count: int = 0
-    created: datetime | None = None
-    modified: datetime | None = None
-
-    model_config = {'from_attributes': True}
-
-
 class WordPublishedProfileOut(WordReadOut):
     author: AuthorOut
     synonyms: list = []
@@ -168,6 +104,15 @@ class WordPublishedProfileOut(WordReadOut):
     borrowings_amount: int = 0
 
 
+class SourceCollectionOut(BaseModel):
+    """Source collection info when collection is borrowed."""
+
+    id: UUID
+    slug: str
+    title: str
+    author: Optional[AuthorOut] = None
+
+
 class CollectionPublishedProfileOut(BaseModel):
     id: UUID
     slug: str
@@ -177,6 +122,7 @@ class CollectionPublishedProfileOut(BaseModel):
     favorite: bool = False
     created: datetime | None = None
     modified: datetime | None = None
+    source_collection: Optional[SourceCollectionOut] = None
     words_languages: list[str] = []
     words_count: int = 0
     words_texts: dict[str, list[str]] = {}
@@ -215,42 +161,30 @@ class CollectionPublishedProfileOut(BaseModel):
     suggestions: list[CollectionSuggestedWordOut] = []
 
 
-class WordCommentsPageOut(BaseModel):
-    page: int
-    limit: int
-    count: int
-    results: List[WordCommentOut]
-
-
 class CollectionSuggestedWordOut(BaseModel):
     id: UUID
-    word_id: UUID
-    collection_id: UUID
-    user_id: UUID
+    word: WordListWithAuthorOut
     status: str = RequestStatusEnum.PENDING
     created: datetime | None = None
+    created_relative: str = Field(default='0:0:0:0')
 
     model_config = {'from_attributes': True}
 
 
 class CollectionSuggestedWordsPageOut(BaseModel):
-    page: int
-    limit: int
     count: int
+    next: str | None = None
+    previous: str | None = None
     results: List[CollectionSuggestedWordOut]
 
 
 __all__ = [
     'WordListOut',
-    'WordReadOut',
-    'WordsPageOut',
     'AuthorOut',
     'AuthorShortOut',
     'WordListWithAuthorOut',
-    'WordsWithAuthorPageOut',
     'WordPublishedProfileOut',
     'CollectionShortOut',
-    'CollectionReadOut',
     'CollectionsPageOut',
     'TranslationOut',
     'TranslationsPageOut',
@@ -261,8 +195,5 @@ __all__ = [
     'ImageOut',
     'ImagesPageOut',
     'SynonymsPageOut',
-    'WordCommentIn',
-    'WordCommentOut',
-    'WordCommentsPageOut',
     'CollectionPublishedProfileOut',
 ]

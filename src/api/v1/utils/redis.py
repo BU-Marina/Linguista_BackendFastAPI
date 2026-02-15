@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import aioredis
+import redis.asyncio as aioredis
 from functools import lru_cache
 
 from config.settings import settings

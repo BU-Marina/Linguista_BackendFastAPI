@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import get_async_session
 from auth.setup import current_user
 
+from api.v1.core_schemas import FavoriteToggleOut
 from api.v1.vocabulary.params import build_collections_list_params
 from .schemas import (
     CollectionIn,
@@ -42,6 +43,7 @@ async def collections_list(
     ordering: str | None = Query(None),
     search: str | None = Query(None),
     tags: str | None = Query(None),
+    languages: str | None = Query(None),
     favorite_only: bool = Query(False),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
@@ -52,6 +54,7 @@ async def collections_list(
         ordering=ordering,
         search=search,
         tags=tags,
+        languages=languages,
         favorite_only=favorite_only,
     )
     return await collections_list_service(
@@ -122,7 +125,7 @@ async def collection_delete(
 @router.post('/{collection_id}/add-words', response_model=CollectionReadOut)
 async def collection_add_words(
     collection_id: UUID,
-    word_slugs: list[str] = Body(..., embed=True),
+    word_ids: list[str] = Body(..., embed=True),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
@@ -130,14 +133,14 @@ async def collection_add_words(
         session=session,
         user_id=user.id,
         collection_id=collection_id,
-        word_slugs=word_slugs,
+        word_ids=word_ids,
     )
 
 
 @router.post('/{collection_id}/remove-words', response_model=CollectionReadOut)
 async def collection_remove_words(
     collection_id: UUID,
-    word_slugs: list[str] = Body(..., embed=True),
+    word_ids: list[str] = Body(..., embed=True),
     session: AsyncSession = Depends(get_async_session),
     user=Depends(current_user),
 ):
@@ -145,7 +148,7 @@ async def collection_remove_words(
         session=session,
         user_id=user.id,
         collection_id=collection_id,
-        word_slugs=word_slugs,
+        word_ids=word_ids,
     )
 
 
@@ -214,7 +217,7 @@ async def collection_subscription_detail(
     )
 
 
-@router.post('/{collection_id}/favorite', response_model=CollectionReadOut)
+@router.post('/{collection_id}/favorite', response_model=FavoriteToggleOut)
 async def collection_favorite_toggle(
     collection_id: UUID,
     session: AsyncSession = Depends(get_async_session),

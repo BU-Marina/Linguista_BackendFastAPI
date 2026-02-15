@@ -6,17 +6,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.db import get_async_session
 from auth.setup import current_user, optional_current_user
+from core.celery.app import celery_app
+from tasks.constants import UPDATE_WORD_VIEWS, UPDATE_COLLECTION_VIEWS
 from api.v1.vocabulary.params import (
     build_words_list_params,
     build_collections_list_params,
 )
-from .schemas import (
-    WordsPageOut,
+from api.v1.core_schemas import FavoriteToggleOut
+from api.v1.vocabulary.schemas import (
+    WordsIdsIn,
+    WordResolveOut,
     WordsWithAuthorPageOut,
     WordReadOut,
+    WordCommentIn,
+    WordCommentOut,
+    WordCommentsPageOut,
+)
+from api.v1.collections.schemas import (
+    CollectionResolveOut,
+    CollectionReadOut,
+    CollectionCommentsPageOut,
+    CollectionCommentOut,
+    CollectionCommentIn,
+)
+
+from .schemas import (
     WordPublishedProfileOut,
     CollectionsPageOut,
-    CollectionReadOut,
     CollectionPublishedProfileOut,
     TranslationsPageOut,
     TranslationOut,
@@ -27,16 +43,8 @@ from .schemas import (
     ImagesPageOut,
     ImageOut,
     SynonymsPageOut,
-    CollectionCommentsPageOut,
-    CollectionCommentOut,
-    CollectionCommentIn,
-    WordCommentsPageOut,
-    WordCommentOut,
-    WordCommentIn,
     CollectionSuggestedWordsPageOut,
 )
-from api.v1.vocabulary.schemas import WordsIdsIn, WordResolveOut
-from api.v1.collections.schemas import CollectionResolveOut
 from .services import (
     published_words_list_service,
     published_word_detail_service,
@@ -86,8 +94,6 @@ from .services import (
     published_collection_suggested_words_reject_service,
     published_collection_suggested_words_destroy_service,
 )
-from core.celery.app import celery_app
-from tasks.constants import UPDATE_WORD_VIEWS, UPDATE_COLLECTION_VIEWS
 
 router = APIRouter(prefix='/published', tags=['published'])
 
@@ -191,11 +197,13 @@ async def published_collection_comments(
 
 @router.post(
     '/collections/{collection_id}/comments',
-    response_model=CollectionCommentOut,
+    response_model=CollectionCommentsPageOut,
 )
 async def published_collection_comment_create(
     collection_id: UUID,
     payload: CollectionCommentIn,
+    page: int = Query(1, ge=1),
+    limit: int = Query(32, ge=1, le=500),
     user=Depends(current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
@@ -204,6 +212,8 @@ async def published_collection_comment_create(
         user_id=user.id,
         collection_id=collection_id,
         text=payload.text,
+        page=page,
+        limit=limit,
     )
 
 
@@ -322,11 +332,13 @@ async def published_word_comments(
 
 @router.post(
     '/words/{word_id}/comments',
-    response_model=WordCommentOut,
+    response_model=WordCommentsPageOut,
 )
 async def published_word_comment_create(
     word_id: UUID,
     payload: WordCommentIn,
+    page: int = Query(1, ge=1),
+    limit: int = Query(32, ge=1, le=500),
     user=Depends(current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
@@ -335,6 +347,8 @@ async def published_word_comment_create(
         user_id=user.id,
         word_id=word_id,
         text=payload.text,
+        page=page,
+        limit=limit,
     )
 
 
@@ -483,7 +497,7 @@ async def published_collection_suggested_words_add(
         session=session,
         user_id=user.id,
         collection_id=collection_id,
-        word_ids=payload.word_ids,
+        word_ids=payload.words,
     )
 
 
@@ -501,7 +515,7 @@ async def published_collection_suggested_words_destroy(
         session=session,
         user_id=user.id,
         collection_id=collection_id,
-        word_ids=payload.word_ids,
+        word_ids=payload.words,
     )
 
 
@@ -519,7 +533,7 @@ async def published_collection_suggested_words_accept(
         session=session,
         user_id=user.id,
         collection_id=collection_id,
-        word_ids=payload.word_ids,
+        word_ids=payload.words,
     )
 
 
@@ -537,7 +551,7 @@ async def published_collection_suggested_words_reject(
         session=session,
         user_id=user.id,
         collection_id=collection_id,
-        word_ids=payload.word_ids,
+        word_ids=payload.words,
     )
 
 
@@ -775,7 +789,7 @@ async def published_words(
         },
     )
 
-    return WordsPageOut(
+    return WordsWithAuthorPageOut(
         page=params.page,
         limit=params.limit,
         count=total,
@@ -819,7 +833,7 @@ async def published_words_new(
         params=params,
         ordering_override='-created',
     )
-    return WordsPageOut(
+    return WordsWithAuthorPageOut(
         page=params.page, limit=params.limit, count=total, results=results
     )
 
@@ -838,7 +852,7 @@ async def published_words_friends(
 ):
     friend_ids = await _get_friend_ids(session, user.id)
     if not friend_ids:
-        return WordsPageOut(page=page, limit=limit, count=0, results=[])
+        return WordsWithAuthorPageOut(page=page, limit=limit, count=0, results=[])
 
     params = build_words_list_params(
         page=page,
@@ -855,7 +869,7 @@ async def published_words_friends(
         params=params,
         author_ids=friend_ids,
     )
-    return WordsPageOut(
+    return WordsWithAuthorPageOut(
         page=params.page, limit=params.limit, count=total, results=results
     )
 
@@ -874,7 +888,7 @@ async def published_words_subscriptions(
 ):
     author_ids = await _get_subscription_author_ids(session, user.id)
     if not author_ids:
-        return WordsPageOut(page=page, limit=limit, count=0, results=[])
+        return WordsWithAuthorPageOut(page=page, limit=limit, count=0, results=[])
 
     params = build_words_list_params(
         page=page,
@@ -891,7 +905,7 @@ async def published_words_subscriptions(
         params=params,
         author_ids=author_ids,
     )
-    return WordsPageOut(
+    return WordsWithAuthorPageOut(
         page=params.page, limit=params.limit, count=total, results=results
     )
 
@@ -923,7 +937,7 @@ async def published_words_favorites(
         params=params,
         favorite_only=True,
     )
-    return WordsPageOut(
+    return WordsWithAuthorPageOut(
         page=params.page, limit=params.limit, count=total, results=results
     )
 
@@ -957,7 +971,7 @@ async def published_word_borrow(
     )
 
 
-@router.post('/words/{word_id}/favorite', response_model=WordReadOut)
+@router.post('/words/{word_id}/favorite', response_model=FavoriteToggleOut)
 async def published_word_favorite(
     word_id: UUID,
     user=Depends(current_user),
@@ -1178,7 +1192,7 @@ async def published_collection_borrow(
     )
 
 
-@router.post('/collections/{collection_id}/favorite', response_model=CollectionReadOut)
+@router.post('/collections/{collection_id}/favorite', response_model=FavoriteToggleOut)
 async def published_collection_favorite(
     collection_id: UUID,
     user=Depends(current_user),
@@ -1191,10 +1205,19 @@ async def published_collection_favorite(
     )
 
 
-@router.post('/collections/{collection_id}/subscribe', response_model=CollectionReadOut)
+@router.post(
+    '/collections/{collection_id}/subscribe',
+    response_model=CollectionPublishedProfileOut,
+)
 async def published_collection_subscribe(
     collection_id: UUID,
-    enable_notifications: bool | None = Query(None),
+    notifications: bool | None = Query(
+        None,
+        description=(
+            'If provided (any value), toggles notifications for an existing '
+            'subscription instead of subscribing/unsubscribing.'
+        ),
+    ),
     user=Depends(current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
@@ -1202,7 +1225,7 @@ async def published_collection_subscribe(
         session=session,
         user_id=user.id,
         collection_id=collection_id,
-        enable_notifications=enable_notifications,
+        notifications=notifications,
     )
 
 

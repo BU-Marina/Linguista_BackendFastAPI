@@ -10,9 +10,11 @@ from pydantic import BaseModel, Field
 
 
 class DefinitionIn(BaseModel):
+    id: Optional[UUID] = None  # If provided, update instead of create
     text: str
     translation: Optional[str] = None
     language: Optional[str] = None
+    words: Optional[List[UUID]] = None  # Word IDs to associate with this definition
 
 
 class DefinitionOut(BaseModel):
@@ -21,6 +23,7 @@ class DefinitionOut(BaseModel):
     text: str
     translation: Optional[str] = None
     language: Optional[str] = None
+    words_count: int = 0
     other_words_count: int = 0
     last_4_words: List[str] = Field(default_factory=list)
     created: Optional[datetime] = None
@@ -33,6 +36,8 @@ class PageOut(BaseModel):
     page: int
     limit: int
     count: int
+    next: str | None = None
+    previous: str | None = None
     results: list
 
 

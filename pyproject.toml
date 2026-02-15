@@ -30,6 +30,8 @@ dj-database-url = "^3.0.1"
 fastapi-users-db-sqlalchemy = "^7.0.0"
 redis = "^7.1.0"
 httpx = "^0.28.1"
+setuptools = "^80.9.0"
+websockets = "^16.0"
 
 [tool.poetry.group.dev.dependencies]
 gevent = "^25.9.1"

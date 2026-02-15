@@ -129,6 +129,25 @@ async def forgot_password(
     return None
 
 
+@router.post('/request-verify-token', status_code=status.HTTP_202_ACCEPTED)
+async def request_verify_token(
+    email: str = Body(..., embed=True),
+    user_manager=Depends(get_user_manager),
+):
+    """Request email verification token (resend verification email)."""
+    try:
+        user = await user_manager.get_by_email(email)
+        if user.is_verified:
+            # Don't reveal if user is already verified
+            pass
+        else:
+            await user_manager.request_verify(user)
+    except Exception:
+        # Don't reveal if user exists
+        pass
+    return None
+
+
 # --- Custom Auth Endpoints ---
 
 
@@ -390,7 +409,8 @@ async def update_me(
                 for k, v in settings_val.items():
                     setattr(user.settings, k, v)
 
-    # транзакция закрыта (commit) — обновления сохранены
+    # Сохранить изменения
+    await db.commit()
     await db.refresh(user)
 
     # вернуть полный профиль (используем уже реализованный get_me)

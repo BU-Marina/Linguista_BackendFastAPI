@@ -8,7 +8,6 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
 
 from core.constants import AmountLimits
 
@@ -170,11 +169,7 @@ async def learning_languages_create_service(
             ull.cover_id = default_cover
         session.add(ull)
 
-    try:
-        await session.commit()
-    except IntegrityError:
-        await session.rollback()
-        raise HTTPException(status_code=409, detail='Some languages are already added')
+    await session.commit()
 
     return await learning_languages_list_service(
         session=session,
@@ -276,11 +271,14 @@ async def native_languages_service(
                 'name_local': r['name_local'],
                 'name_en': r['name_en'],
                 'name_ru': r['name_ru'],
+                'country_ru': r.get('country_ru'),
+                'country_en': r.get('country_en'),
                 'flag_icon': r['flag_icon'],
                 'is_native': True,
                 'learning_available': True,
                 'interface_available': False,
-            }
+            },
+            lang=lang,
         )
         for r in rows
     ]

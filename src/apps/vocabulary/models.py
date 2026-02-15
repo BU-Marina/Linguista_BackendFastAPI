@@ -14,7 +14,7 @@ from sqlalchemy import (
     Index,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import relationship, declared_attr
+from sqlalchemy.orm import relationship, declared_attr, backref
 
 from core.base import Base
 from core.mixins import SlugMixin, PublicAccessMixin
@@ -27,72 +27,72 @@ from .constants import VocabularyLengthLimits
 # -------------------------
 # Word.types (WordType)
 vocabulary_word_types = Table(
-    "vocabulary_word_types",
+    'vocabulary_word_types',
     Base.metadata,
     Column(
-        "word_id",
+        'word_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "wordtype_id",
+        'wordtype_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_wordtype.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_wordtype.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
 
 # Word.tags -> core.Tag
 vocabulary_word_tags = Table(
-    "vocabulary_word_tags",
+    'vocabulary_word_tags',
     Base.metadata,
     Column(
-        "word_id",
+        'word_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "tag_id",
+        'tag_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("core_tag.id", ondelete="CASCADE"),
+        ForeignKey('core_tag.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
 
 # Collection.tags -> core.Tag
 vocabulary_collection_tags = Table(
-    "vocabulary_collection_tags",
+    'vocabulary_collection_tags',
     Base.metadata,
     Column(
-        "collection_id",
+        'collection_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "tag_id",
+        'tag_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("core_tag.id", ondelete="CASCADE"),
+        ForeignKey('core_tag.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
 
 # Collection.coauthors -> users_user
 vocabulary_collection_coauthors = Table(
-    "vocabulary_collection_coauthors",
+    'vocabulary_collection_coauthors',
     Base.metadata,
     Column(
-        "collection_id",
+        'collection_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "user_id",
+        'user_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
@@ -100,39 +100,39 @@ vocabulary_collection_coauthors = Table(
 # Collection.subscribers (through CollectionSubscription model — handled as model, not table here)
 
 vocabulary_word_share_with = Table(
-    "vocabulary_word_share_with",
+    'vocabulary_word_share_with',
     Base.metadata,
     Column(
-        "word_id",
+        'word_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     ),
     Column(
-        "user_id",
+        'user_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     ),
-    UniqueConstraint("word_id", "user_id", name="uniq_word_share_with"),
+    UniqueConstraint('word_id', 'user_id', name='uniq_word_share_with'),
 )
 
 vocabulary_collection_share_with = Table(
-    "vocabulary_collection_share_with",
+    'vocabulary_collection_share_with',
     Base.metadata,
     Column(
-        "collection_id",
+        'collection_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         nullable=False,
     ),
     Column(
-        "user_id",
+        'user_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     ),
-    UniqueConstraint("collection_id", "user_id", name="uniq_collection_share_with"),
+    UniqueConstraint('collection_id', 'user_id', name='uniq_collection_share_with'),
 )
 
 # -------------------------
@@ -149,63 +149,95 @@ class Word(Base, SlugMixin, PublicAccessMixin):
         String(ActivityStatusEnum.max_length),
         nullable=False,
         server_default=ActivityStatusEnum.INACTIVE,
+        insert_default=ActivityStatusEnum.INACTIVE,
     )
-    activity_progress = Column(SmallInteger, nullable=False, server_default="0")
-    is_problematic = Column(Boolean, nullable=False, server_default="false")
-    is_trophie = Column(Boolean, nullable=False, server_default="false")
+    activity_progress = Column(
+        SmallInteger,
+        nullable=False,
+        server_default='0',
+        insert_default=0,
+    )
+    is_problematic = Column(
+        Boolean,
+        nullable=False,
+        server_default='false',
+        insert_default=False,
+    )
+    is_trophie = Column(
+        Boolean,
+        nullable=False,
+        server_default='false',
+        insert_default=False,
+    )
     note = Column(String(VocabularyLengthLimits.MAX_NOTE_LENGTH), nullable=True)
     last_exercise_date = Column(DateTime(timezone=True), nullable=True)
-    is_premium = Column(Boolean, nullable=False, server_default="false")
-    allow_comments = Column(Boolean, nullable=False, server_default="true")
+    is_premium = Column(
+        Boolean,
+        nullable=False,
+        server_default='false',
+        insert_default=False,
+    )
+    allow_comments = Column(
+        Boolean,
+        nullable=False,
+        server_default='true',
+        insert_default=True,
+    )
 
     # FK
     language_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("languages_language.id", ondelete="SET NULL"),
+        ForeignKey('languages_language.id', ondelete='SET NULL'),
         nullable=True,
     )
     source_word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="SET NULL"),
+        ForeignKey('vocabulary_word.id', ondelete='SET NULL'),
         nullable=True,
     )
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    language = relationship("Language", backref="words", lazy="selectin")
+    language = relationship('Language', backref='words', lazy='selectin')
     source_word = relationship(
-        "Word", remote_side="Word.id", backref="borrowings", lazy="selectin"
+        'Word', remote_side='Word.id', backref='borrowings', lazy='selectin'
     )
-    author = relationship("User", backref="words", lazy="selectin")
+    author = relationship('User', backref='words', lazy='selectin')
 
     # Many-to-many (some via explicit through-models below)
     types = relationship(
-        "WordType", secondary=vocabulary_word_types, backref="words", lazy="selectin"
+        'WordType',
+        secondary=vocabulary_word_types,
+        backref='words',
+        lazy='noload',  # avoid async lazy-load; use explicit selectinload in queries
     )
     tags = relationship(
-        "Tag", secondary=vocabulary_word_tags, backref="words", lazy="selectin"
+        'Tag',
+        secondary=vocabulary_word_tags,
+        backref='words',
+        lazy='noload',  # avoid async lazy-load; use explicit selectinload in queries
     )
     share_with = relationship(
-        "User",
+        'User',
         secondary=vocabulary_word_share_with,
-        backref="shared_words",
-        lazy="selectin",
+        backref='shared_words',
+        lazy='selectin',
     )
 
-    __slug_source__ = ["text", "author__username", "language__isocode"]
+    __slug_source__ = ['text', 'author__username', 'language__isocode']
 
     __table_args__ = (
-        Index("ix_vocabulary_word_created_modified", "created", "modified"),
+        Index('ix_vocabulary_word_created_modified', 'created', 'modified'),
         # Note: Django had UniqueConstraint('text', 'author', 'language') — case-insensitive in Django.
         # We will create functional unique index (lower(...)) in Alembic migration to match original behavior.
     )
 
     def __repr__(self):
-        return f"<Word(text={self.text}, author_id={self.author_id})>"
+        return f'<Word(text={self.text}, author_id={self.author_id})>'
 
 
 class WordActivityHistory(Base):
@@ -214,17 +246,19 @@ class WordActivityHistory(Base):
     # fields
     previous_activity_progress = Column(SmallInteger, nullable=True)
     new_activity_progress = Column(SmallInteger, nullable=True)
-    upgrade = Column(Boolean, nullable=False, server_default="true")
+    upgrade = Column(
+        Boolean, nullable=False, server_default='true', insert_default='true'
+    )
 
     # FK
     session_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("exercises_exercisesessionhistory.id", ondelete="CASCADE"),
+        ForeignKey('exercises_exercisesessionhistory.id', ondelete='CASCADE'),
         nullable=True,
     )
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
 
@@ -233,23 +267,25 @@ class WordActivityHistory(Base):
         String(ActivityStatusEnum.max_length),
         nullable=False,
         server_default=ActivityStatusEnum.INACTIVE,
+        insert_default=ActivityStatusEnum.INACTIVE,
     )
     new_activity_status = Column(
         String(ActivityStatusEnum.max_length),
         nullable=False,
         server_default=ActivityStatusEnum.ACTIVE,
+        insert_default=ActivityStatusEnum.ACTIVE,
     )
 
     # Relationships (FK)
     session = relationship(
-        "ExerciseSessionHistory", backref="words_activity_changes", lazy="selectin"
+        'ExerciseSessionHistory', backref='words_activity_changes', lazy='selectin'
     )
-    word = relationship("Word", backref="activity_history", lazy="selectin")
+    word = relationship('Word', backref='activity_history', lazy='selectin')
 
-    __table_args__ = (Index("ix_vocabulary_wordactivityhistory_created", "created"),)
+    __table_args__ = (Index('ix_vocabulary_wordactivityhistory_created', 'created'),)
 
     def __repr__(self):
-        return f"<WordActivityHistory(word_id={self.word_id})>"
+        return f'<WordActivityHistory(word_id={self.word_id})>'
 
 
 class WordType(Base, SlugMixin):
@@ -259,12 +295,12 @@ class WordType(Base, SlugMixin):
     name_ru = Column(String(64), nullable=False, unique=True)
     name_en = Column(String(64), nullable=False, unique=True)
 
-    __slug_source__ = ["name"]
+    __slug_source__ = ['name']
 
-    __table_args__ = (Index("ix_vocabulary_wordtype_created", "created"),)
+    __table_args__ = (Index('ix_vocabulary_wordtype_created', 'created'),)
 
     def __repr__(self):
-        return f"<WordType(name={self.name})>"
+        return f'<WordType(name={self.name})>'
 
 
 class FormGroup(Base, SlugMixin):
@@ -282,28 +318,28 @@ class FormGroup(Base, SlugMixin):
     # FK
     language_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("languages_language.id", ondelete="SET NULL"),
+        ForeignKey('languages_language.id', ondelete='SET NULL'),
         nullable=True,
     )
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    language = relationship("Language", backref="form_groups", lazy="selectin")
-    author = relationship("User", backref="form_groups", lazy="selectin")
+    language = relationship('Language', backref='form_groups', lazy='selectin')
+    author = relationship('User', backref='form_groups', lazy='selectin')
 
-    __slug_source__ = ["name", "author__username"]
+    __slug_source__ = ['name', 'author__username']
 
     __table_args__ = (
-        Index("ix_vocabulary_formgroup_created_modified", "created", "modified"),
+        Index('ix_vocabulary_formgroup_created_modified', 'created', 'modified'),
         # functional unique lower(name)+author -> create in Alembic
     )
 
     def __repr__(self):
-        return f"<FormGroup(name={self.name})>"
+        return f'<FormGroup(name={self.name})>'
 
 
 class WordTranslation(Base, SlugMixin):
@@ -315,28 +351,28 @@ class WordTranslation(Base, SlugMixin):
     # FK
     language_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("languages_language.id", ondelete="SET NULL"),
+        ForeignKey('languages_language.id', ondelete='SET NULL'),
         nullable=True,
     )
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    language = relationship("Language", backref="word_translations", lazy="selectin")
-    author = relationship("User", backref="word_translations", lazy="selectin")
+    language = relationship('Language', backref='word_translations', lazy='selectin')
+    author = relationship('User', backref='word_translations', lazy='selectin')
 
-    __slug_source__ = ["text", "author__username", "language__name"]
+    __slug_source__ = ['text', 'author__username', 'language__name']
 
     __table_args__ = (
-        Index("ix_vocabulary_wordtranslation_created_modified", "created", "modified"),
+        Index('ix_vocabulary_wordtranslation_created_modified', 'created', 'modified'),
         # functional unique lower(text)+author+language -> create in Alembic
     )
 
     def __repr__(self):
-        return f"<WordTranslation(text={self.text})>"
+        return f'<WordTranslation(text={self.text})>'
 
 
 class Definition(Base, SlugMixin):
@@ -351,28 +387,28 @@ class Definition(Base, SlugMixin):
     # FK
     language_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("languages_language.id", ondelete="SET NULL"),
+        ForeignKey('languages_language.id', ondelete='SET NULL'),
         nullable=True,
     )
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    language = relationship("Language", backref="definitions", lazy="selectin")
-    author = relationship("User", backref="definitions", lazy="selectin")
+    language = relationship('Language', backref='definitions', lazy='selectin')
+    author = relationship('User', backref='definitions', lazy='selectin')
 
-    __slug_source__ = ["text", "author__username"]
+    __slug_source__ = ['text', 'author__username']
 
     __table_args__ = (
-        Index("ix_vocabulary_definition_created_modified", "created", "modified"),
+        Index('ix_vocabulary_definition_created_modified', 'created', 'modified'),
         # functional unique lower(text)+author -> create in Alembic
     )
 
     def __repr__(self):
-        return f"<Definition(text={self.text})>"
+        return f'<Definition(text={self.text})>'
 
 
 class UsageExample(Base, SlugMixin):
@@ -383,7 +419,9 @@ class UsageExample(Base, SlugMixin):
     translation = Column(
         String(VocabularyLengthLimits.MAX_EXAMPLE_LENGTH), nullable=True
     )
-    source = Column(String(3), nullable=False, server_default="OTH")
+    source = Column(
+        String(3), nullable=False, server_default='OTH', insert_default='OTH'
+    )
     source_name = Column(
         String(VocabularyLengthLimits.MAX_EXAMPLE_SOURCE_LENGTH), nullable=True
     )
@@ -394,28 +432,28 @@ class UsageExample(Base, SlugMixin):
     # FK
     language_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("languages_language.id", ondelete="SET NULL"),
+        ForeignKey('languages_language.id', ondelete='SET NULL'),
         nullable=True,
     )
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    language = relationship("Language", backref="examples", lazy="selectin")
-    author = relationship("User", backref="examples", lazy="selectin")
+    language = relationship('Language', backref='examples', lazy='selectin')
+    author = relationship('User', backref='examples', lazy='selectin')
 
-    __slug_source__ = ["text", "author__username"]
+    __slug_source__ = ['text', 'author__username']
 
     __table_args__ = (
-        Index("ix_vocabulary_usageexample_created_modified", "created", "modified"),
+        Index('ix_vocabulary_usageexample_created_modified', 'created', 'modified'),
         # functional unique lower(text)+author -> create in Alembic
     )
 
     def __repr__(self):
-        return f"<UsageExample(text={self.text})>"
+        return f'<UsageExample(text={self.text})>'
 
 
 class ImageAssociation(Base):
@@ -430,19 +468,19 @@ class ImageAssociation(Base):
     # FK
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    author = relationship("User", backref="image_associations", lazy="selectin")
+    author = relationship('User', backref='image_associations', lazy='selectin')
 
     __table_args__ = (
-        Index("ix_vocabulary_imageassociation_created_modified", "created", "modified"),
+        Index('ix_vocabulary_imageassociation_created_modified', 'created', 'modified'),
     )
 
     def __repr__(self):
-        return f"<ImageAssociation(id={self.id})>"
+        return f'<ImageAssociation(id={self.id})>'
 
 
 class QuoteAssociation(Base):
@@ -455,19 +493,19 @@ class QuoteAssociation(Base):
     # FK
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    author = relationship("User", backref="quote_associations", lazy="selectin")
+    author = relationship('User', backref='quote_associations', lazy='selectin')
 
     __table_args__ = (
-        Index("ix_vocabulary_quoteassociation_created_modified", "created", "modified"),
+        Index('ix_vocabulary_quoteassociation_created_modified', 'created', 'modified'),
     )
 
     def __repr__(self):
-        return f"<QuoteAssociation(text={self.text})>"
+        return f'<QuoteAssociation(text={self.text})>'
 
 
 class Collection(Base, SlugMixin, PublicAccessMixin):
@@ -480,102 +518,122 @@ class Collection(Base, SlugMixin, PublicAccessMixin):
     description = Column(
         String(VocabularyLengthLimits.MAX_COLLECTION_DESCRIPTION_LENGTH), nullable=True
     )
-    allow_comments = Column(Boolean, nullable=False, server_default="true")
-    allow_suggestions = Column(Boolean, nullable=False, server_default="true")
-    allow_suggestions_notifications = Column(
-        Boolean, nullable=False, server_default="true"
+    allow_comments = Column(
+        Boolean,
+        nullable=False,
+        server_default='true',
+        insert_default=True,
     )
-    is_premium = Column(Boolean, nullable=False, server_default="false")
+    allow_suggestions = Column(
+        Boolean,
+        nullable=False,
+        server_default='true',
+        insert_default=True,
+    )
+    allow_suggestions_notifications = Column(
+        Boolean,
+        nullable=False,
+        server_default='true',
+        insert_default=True,
+    )
+    is_premium = Column(
+        Boolean,
+        nullable=False,
+        server_default='false',
+        insert_default=False,
+    )
 
     # FK
     source_collection_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="SET NULL"),
+        ForeignKey('vocabulary_collection.id', ondelete='SET NULL'),
         nullable=True,
     )
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
     source_collection = relationship(
-        "Collection", remote_side="Collection.id", backref="borrowings", lazy="selectin"
+        'Collection', remote_side='Collection.id', backref='borrowings', lazy='selectin'
     )
-    author = relationship("User", backref="collections", lazy="selectin")
+    author = relationship('User', backref='collections', lazy='selectin')
 
     # Many-to-many via through models:
     # - words via WordsInCollections model
     # - tags via vocabulary_collection_tags
     # - coauthors via vocabulary_collection_coauthors
     tags = relationship(
-        "Tag",
+        'Tag',
         secondary=vocabulary_collection_tags,
-        backref="collections",
-        lazy="selectin",
+        backref='collections',
+        lazy='selectin',
     )
     coauthors = relationship(
-        "User",
+        'User',
         secondary=vocabulary_collection_coauthors,
-        backref="joint_collections",
-        lazy="selectin",
+        backref='joint_collections',
+        lazy='selectin',
     )
     share_with = relationship(
-        "User",
+        'User',
         secondary=vocabulary_collection_share_with,
-        backref="shared_collections",
-        lazy="selectin",
+        backref='shared_collections',
+        lazy='selectin',
     )
 
-    __slug_source__ = ["title", "author__username"]
+    __slug_source__ = ['title', 'author__username']
 
     __table_args__ = (
-        Index("ix_vocabulary_collection_created_modified", "created", "modified"),
+        Index('ix_vocabulary_collection_created_modified', 'created', 'modified'),
         # functional unique lower(title)+author -> create in Alembic
     )
 
     def __repr__(self):
-        return f"<Collection(title={self.title})>"
+        return f'<Collection(title={self.title})>'
 
 
 class CollectionSubscription(Base):
     """Промежуточная модель подписки на коллекцию."""
 
     # fields
-    enable_notifications = Column(Boolean, nullable=False, server_default="true")
+    enable_notifications = Column(
+        Boolean, nullable=False, server_default='true', insert_default='true'
+    )
     new_words = Column(Text, nullable=True)
     updated_words = Column(Text, nullable=True)
 
     # FK
     subscriber_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
     collection_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
     subscriber = relationship(
-        "User", backref="collections_subscriptions_detail", lazy="selectin"
+        'User', backref='collections_subscriptions_detail', lazy='selectin'
     )
     collection = relationship(
-        "Collection", backref="subscribers_detail", lazy="selectin"
+        'Collection', backref='subscribers_detail', lazy='selectin'
     )
 
     __table_args__ = (
         UniqueConstraint(
-            "subscriber_id", "collection_id", name="unique_collection_subscription"
+            'subscriber_id', 'collection_id', name='unique_collection_subscription'
         ),
-        Index("ix_vocabulary_collectionsubscription_created", "created"),
+        Index('ix_vocabulary_collectionsubscription_created', 'created'),
     )
 
     def __repr__(self):
-        return f"<CollectionSubscription(subscriber={self.subscriber_id}, collection={self.collection_id})>"
+        return f'<CollectionSubscription(subscriber={self.subscriber_id}, collection={self.collection_id})>'
 
 
 # -------------------------
@@ -591,23 +649,23 @@ class WordsFormGroups(Base):
     # FK
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
     forms_group_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_formgroup.id", ondelete="SET NULL"),
+        ForeignKey('vocabulary_formgroup.id', ondelete='SET NULL'),
         nullable=True,
     )
 
     # Relationships (FK)
-    word = relationship("Word", backref="words_form_groups", lazy="selectin")
+    word = relationship('Word', backref='words_form_groups', lazy='selectin')
     forms_group = relationship(
-        "FormGroup", backref="words_form_groups", lazy="selectin"
+        'FormGroup', backref='words_form_groups', lazy='selectin'
     )
 
     __table_args__ = (
-        UniqueConstraint("word_id", "forms_group_id", name="unique_word_forms_group"),
+        UniqueConstraint('word_id', 'forms_group_id', name='unique_word_forms_group'),
     )
 
 
@@ -616,22 +674,26 @@ class WordTranslations(Base):
 
     translation_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_wordtranslation.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_wordtranslation.id', ondelete='CASCADE'),
         nullable=False,
     )
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     translation = relationship(
-        "WordTranslation", backref="wordtranslations", lazy="selectin"
+        'WordTranslation', backref='wordtranslations', lazy='selectin'
     )
-    word = relationship("Word", backref="wordtranslations", lazy="selectin")
+    word = relationship(
+        'Word',
+        backref=backref('wordtranslations', lazy='selectin', passive_deletes=True),
+        lazy='selectin',
+    )
 
     __table_args__ = (
-        UniqueConstraint("word_id", "translation_id", name="unique_word_translation"),
+        UniqueConstraint('word_id', 'translation_id', name='unique_word_translation'),
     )
 
 
@@ -640,20 +702,24 @@ class WordDefinitions(Base):
 
     definition_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_definition.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_definition.id', ondelete='CASCADE'),
         nullable=False,
     )
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
 
-    definition = relationship("Definition", backref="worddefinitions", lazy="selectin")
-    word = relationship("Word", backref="worddefinitions", lazy="selectin")
+    definition = relationship('Definition', backref='worddefinitions', lazy='selectin')
+    word = relationship(
+        'Word',
+        backref=backref('worddefinitions', lazy='selectin', passive_deletes=True),
+        lazy='selectin',
+    )
 
     __table_args__ = (
-        UniqueConstraint("word_id", "definition_id", name="unique_word_definition"),
+        UniqueConstraint('word_id', 'definition_id', name='unique_word_definition'),
     )
 
 
@@ -662,20 +728,24 @@ class WordUsageExamples(Base):
 
     example_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_usageexample.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_usageexample.id', ondelete='CASCADE'),
         nullable=False,
     )
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
 
-    example = relationship("UsageExample", backref="wordusageexamples", lazy="selectin")
-    word = relationship("Word", backref="wordusageexamples", lazy="selectin")
+    example = relationship('UsageExample', backref='wordusageexamples', lazy='selectin')
+    word = relationship(
+        'Word',
+        backref=backref('wordusageexamples', lazy='selectin', passive_deletes=True),
+        lazy='selectin',
+    )
 
     __table_args__ = (
-        UniqueConstraint("word_id", "example_id", name="unique_word_example"),
+        UniqueConstraint('word_id', 'example_id', name='unique_word_example'),
     )
 
 
@@ -684,44 +754,52 @@ class WordImageAssociations(Base):
 
     image_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_imageassociation.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_imageassociation.id', ondelete='CASCADE'),
         nullable=False,
     )
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     image = relationship(
-        "ImageAssociation", backref="wordimageassociations", lazy="selectin"
+        'ImageAssociation', backref='wordimageassociations', lazy='selectin'
     )
-    word = relationship("Word", backref="wordimageassociations", lazy="selectin")
+    word = relationship(
+        'Word',
+        backref=backref('wordimageassociations', lazy='selectin', passive_deletes=True),
+        lazy='selectin',
+    )
 
     __table_args__ = (
-        UniqueConstraint("word_id", "image_id", name="unique_word_image"),
+        UniqueConstraint('word_id', 'image_id', name='unique_word_image'),
     )
 
 
 class WordQuoteAssociations(Base):
     quote_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_quoteassociation.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_quoteassociation.id', ondelete='CASCADE'),
         nullable=False,
     )
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     quote = relationship(
-        "QuoteAssociation", backref="wordquoteassociations", lazy="selectin"
+        'QuoteAssociation', backref='wordquoteassociations', lazy='selectin'
     )
-    word = relationship("Word", backref="wordquoteassociations", lazy="selectin")
+    word = relationship(
+        'Word',
+        backref=backref('wordquoteassociations', lazy='selectin', passive_deletes=True),
+        lazy='selectin',
+    )
 
     __table_args__ = (
-        UniqueConstraint("word_id", "quote_id", name="unique_word_quote"),
+        UniqueConstraint('word_id', 'quote_id', name='unique_word_quote'),
     )
 
 
@@ -730,22 +808,26 @@ class WordsInCollections(Base):
 
     collection_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         nullable=False,
     )
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     collection = relationship(
-        "Collection", backref="words_in_collections", lazy="selectin"
+        'Collection', backref='words_in_collections', lazy='selectin'
     )
-    word = relationship("Word", backref="words_in_collections", lazy="selectin")
+    word = relationship(
+        'Word',
+        backref=backref('words_in_collections', lazy='selectin', passive_deletes=True),
+        lazy='selectin',
+    )
 
     __table_args__ = (
-        UniqueConstraint("word_id", "collection_id", name="unique_word_in_collection"),
+        UniqueConstraint('word_id', 'collection_id', name='unique_word_in_collection'),
     )
 
 
@@ -757,33 +839,34 @@ class WordsSuggestedToCollections(Base):
         String(RequestStatusEnum.max_length),
         nullable=False,
         server_default=RequestStatusEnum.PENDING,
+        insert_default=RequestStatusEnum.PENDING,
     )
 
     # FK
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
     collection_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         nullable=False,
     )
     user_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    word = relationship("Word", backref="suggestions", lazy="selectin")
-    collection = relationship("Collection", backref="suggestions", lazy="selectin")
-    user = relationship("User", backref="words_suggested", lazy="selectin")
+    word = relationship('Word', backref='suggestions', lazy='selectin')
+    collection = relationship('Collection', backref='suggestions', lazy='selectin')
+    user = relationship('User', backref='words_suggested', lazy='selectin')
 
     __table_args__ = (
         UniqueConstraint(
-            "word_id", "collection_id", "user_id", name="unique_suggested_word"
+            'word_id', 'collection_id', 'user_id', name='unique_suggested_word'
         ),
     )
 
@@ -798,7 +881,7 @@ class WordSelfRelationBase:
     def from_word_id(cls):
         return Column(
             PG_UUID(as_uuid=True),
-            ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+            ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
             nullable=False,
         )
 
@@ -806,26 +889,26 @@ class WordSelfRelationBase:
     def to_word_id(cls):
         return Column(
             PG_UUID(as_uuid=True),
-            ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+            ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
             nullable=False,
         )
 
     @declared_attr
     def from_word(cls):
         return relationship(
-            "Word",
+            'Word',
             foreign_keys=[cls.from_word_id],
-            backref=f"{cls.__name__.lower()}_from_words",
-            lazy="selectin",
+            backref=f'{cls.__name__.lower()}_from_words',
+            lazy='selectin',
         )
 
     @declared_attr
     def to_word(cls):
         return relationship(
-            "Word",
+            'Word',
             foreign_keys=[cls.to_word_id],
-            backref=f"{cls.__name__.lower()}_to_words",
-            lazy="selectin",
+            backref=f'{cls.__name__.lower()}_to_words',
+            lazy='selectin',
         )
 
     @declared_attr
@@ -833,13 +916,13 @@ class WordSelfRelationBase:
         # даём уникальные имена constraint'ам, чтобы они не конфликтовали между разными классами
         return (
             UniqueConstraint(
-                "from_word_id",
-                "to_word_id",
-                name=f"unique_words_pair_{cls.__name__.lower()}",
+                'from_word_id',
+                'to_word_id',
+                name=f'unique_words_pair_{cls.__name__.lower()}',
             ),
             CheckConstraint(
-                "from_word_id <> to_word_id",
-                name=f"{cls.__name__.lower()}_not_same_word",
+                'from_word_id <> to_word_id',
+                name=f'{cls.__name__.lower()}_not_same_word',
             ),
         )
 
@@ -877,20 +960,20 @@ class FavoriteWord(Base):
 
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
     user_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
-    word = relationship("Word", backref="favorite_for", lazy="selectin")
-    user = relationship("User", backref="favorite_words", lazy="selectin")
+    word = relationship('Word', backref='favorite_for', lazy='selectin')
+    user = relationship('User', backref='favorite_words', lazy='selectin')
 
     __table_args__ = (
-        UniqueConstraint("word_id", "user_id", name="unique_user_favorite_word"),
+        UniqueConstraint('word_id', 'user_id', name='unique_user_favorite_word'),
     )
 
 
@@ -899,21 +982,21 @@ class FavoriteCollection(Base):
 
     collection_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         nullable=False,
     )
     user_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
-    collection = relationship("Collection", backref="favorite_for", lazy="selectin")
-    user = relationship("User", backref="favorite_collections", lazy="selectin")
+    collection = relationship('Collection', backref='favorite_for', lazy='selectin')
+    user = relationship('User', backref='favorite_collections', lazy='selectin')
 
     __table_args__ = (
         UniqueConstraint(
-            "collection_id", "user_id", name="unique_user_favorite_collection"
+            'collection_id', 'user_id', name='unique_user_favorite_collection'
         ),
     )
 
@@ -925,21 +1008,21 @@ class ViewWord(Base):
 
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
     user_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
-    word = relationship("Word", backref="views", lazy="selectin")
-    user = relationship("User", backref="word_views", lazy="selectin")
+    word = relationship('Word', backref='views', lazy='selectin')
+    user = relationship('User', backref='word_views', lazy='selectin')
 
     __table_args__ = (
-        UniqueConstraint("word_id", "user_id", name="unique_word_view"),
-        Index("ix_vocabulary_viewword_viewdatetime", "view_datetime"),
+        UniqueConstraint('word_id', 'user_id', name='unique_word_view'),
+        Index('ix_vocabulary_viewword_viewdatetime', 'view_datetime'),
     )
 
 
@@ -950,21 +1033,21 @@ class ViewCollection(Base):
 
     collection_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         nullable=False,
     )
     user_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
-    collection = relationship("Collection", backref="views", lazy="selectin")
-    user = relationship("User", backref="collection_views", lazy="selectin")
+    collection = relationship('Collection', backref='views', lazy='selectin')
+    user = relationship('User', backref='collection_views', lazy='selectin')
 
     __table_args__ = (
-        UniqueConstraint("collection_id", "user_id", name="unique_collection_view"),
-        Index("ix_vocabulary_viewcollection_viewdatetime", "view_datetime"),
+        UniqueConstraint('collection_id', 'user_id', name='unique_collection_view'),
+        Index('ix_vocabulary_viewcollection_viewdatetime', 'view_datetime'),
     )
 
 
@@ -973,20 +1056,20 @@ class WordApprove(Base):
 
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
     user_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
-    word = relationship("Word", backref="approves", lazy="selectin")
-    user = relationship("User", backref="approves", lazy="selectin")
+    word = relationship('Word', backref='approves', lazy='selectin')
+    user = relationship('User', backref='approves', lazy='selectin')
 
     __table_args__ = (
-        UniqueConstraint("word_id", "user_id", name="unique_word_approve"),
+        UniqueConstraint('word_id', 'user_id', name='unique_word_approve'),
     )
 
 
@@ -999,31 +1082,32 @@ class PremiumRequest(Base):
         String(RequestStatusEnum.max_length),
         nullable=False,
         server_default=RequestStatusEnum.PENDING,
+        insert_default=RequestStatusEnum.PENDING,
     )
 
     # FK (one-to-one semantics in Django -> modeled as unique FK here)
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=True,
         unique=True,
     )
     collection_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         nullable=True,
         unique=True,
     )
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    word = relationship("Word", backref="premium_requests", lazy="selectin")
-    collection = relationship("Collection", backref="premium_requests", lazy="selectin")
-    author = relationship("User", backref="premium_requests", lazy="selectin")
+    word = relationship('Word', backref='premium_requests', lazy='selectin')
+    collection = relationship('Collection', backref='premium_requests', lazy='selectin')
+    author = relationship('User', backref='premium_requests', lazy='selectin')
 
 
 # -------------------------
@@ -1032,104 +1116,104 @@ class PremiumRequest(Base):
 # For now implement Comment classes with essential fields + likes/dislikes as M2M association tables.
 # -------------------------
 vocabulary_collectioncomment_likes = Table(
-    "vocabulary_collectioncomment_likes",
+    'vocabulary_collectioncomment_likes',
     Base.metadata,
     Column(
-        "collectioncomment_id",
+        'collectioncomment_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collectioncomment.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collectioncomment.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "user_id",
+        'user_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
 
 vocabulary_collectioncomment_dislikes = Table(
-    "vocabulary_collectioncomment_dislikes",
+    'vocabulary_collectioncomment_dislikes',
     Base.metadata,
     Column(
-        "collectioncomment_id",
+        'collectioncomment_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collectioncomment.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collectioncomment.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "user_id",
+        'user_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
 
 vocabulary_wordcomment_likes = Table(
-    "vocabulary_wordcomment_likes",
+    'vocabulary_wordcomment_likes',
     Base.metadata,
     Column(
-        "wordcomment_id",
+        'wordcomment_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_wordcomment.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_wordcomment.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "user_id",
+        'user_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
 
 vocabulary_wordcomment_dislikes = Table(
-    "vocabulary_wordcomment_dislikes",
+    'vocabulary_wordcomment_dislikes',
     Base.metadata,
     Column(
-        "wordcomment_id",
+        'wordcomment_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_wordcomment.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_wordcomment.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "user_id",
+        'user_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
 
 # association tables для ответа (answers -> self M2M)
 vocabulary_collectioncomment_answers = Table(
-    "vocabulary_collectioncomment_answers",
+    'vocabulary_collectioncomment_answers',
     Base.metadata,
     Column(
-        "collectioncomment_id",
+        'collectioncomment_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collectioncomment.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collectioncomment.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "answer_id",
+        'answer_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collectioncomment.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collectioncomment.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
 
 vocabulary_wordcomment_answers = Table(
-    "vocabulary_wordcomment_answers",
+    'vocabulary_wordcomment_answers',
     Base.metadata,
     Column(
-        "wordcomment_id",
+        'wordcomment_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_wordcomment.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_wordcomment.id', ondelete='CASCADE'),
         primary_key=True,
     ),
     Column(
-        "answer_id",
+        'answer_id',
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_wordcomment.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_wordcomment.id', ondelete='CASCADE'),
         primary_key=True,
     ),
 )
@@ -1140,51 +1224,55 @@ class CollectionComment(Base):
 
     # fields (inherited comment model fields: text, author_liked, text_modified) — добавляем явно
     text = Column(Text, nullable=False)
-    author_liked = Column(Boolean, nullable=False, server_default="false")
-    text_modified = Column(Boolean, nullable=False, server_default="false")
+    author_liked = Column(
+        Boolean, nullable=False, server_default='false', insert_default=False
+    )
+    text_modified = Column(
+        Boolean, nullable=False, server_default='false', insert_default=False
+    )
 
     # FK
     collection_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_collection.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_collection.id', ondelete='CASCADE'),
         nullable=False,
     )
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    collection = relationship("Collection", backref="comments", lazy="selectin")
-    author = relationship("User", backref="collection_comments", lazy="selectin")
+    collection = relationship('Collection', backref='comments', lazy='selectin')
+    author = relationship('User', backref='collection_comments', lazy='selectin')
 
     # M2M relationships (likes/dislikes/answers)
     likes = relationship(
-        "User",
+        'User',
         secondary=vocabulary_collectioncomment_likes,
-        backref="collection_comments_liked",
-        lazy="selectin",
+        backref='collection_comments_liked',
+        lazy='selectin',
     )
     dislikes = relationship(
-        "User",
+        'User',
         secondary=vocabulary_collectioncomment_dislikes,
-        backref="collection_comments_disliked",
-        lazy="selectin",
+        backref='collection_comments_disliked',
+        lazy='selectin',
     )
     answers = relationship(
-        "CollectionComment",
+        'CollectionComment',
         secondary=vocabulary_collectioncomment_answers,
-        primaryjoin="CollectionComment.id==vocabulary_collectioncomment_answers.c.collectioncomment_id",
-        secondaryjoin="CollectionComment.id==vocabulary_collectioncomment_answers.c.answer_id",
-        backref="answer_for",
-        lazy="selectin",
+        primaryjoin='CollectionComment.id==vocabulary_collectioncomment_answers.c.collectioncomment_id',
+        secondaryjoin='CollectionComment.id==vocabulary_collectioncomment_answers.c.answer_id',
+        backref='answer_for',
+        lazy='selectin',
     )
 
-    __table_args__ = (Index("ix_vocabulary_collectioncomment_created", "created"),)
+    __table_args__ = (Index('ix_vocabulary_collectioncomment_created', 'created'),)
 
     def __repr__(self):
-        return f"<CollectionComment(id={self.id}, collection_id={self.collection_id})>"
+        return f'<CollectionComment(id={self.id}, collection_id={self.collection_id})>'
 
 
 class WordComment(Base):
@@ -1192,48 +1280,52 @@ class WordComment(Base):
 
     # fields
     text = Column(Text, nullable=False)
-    author_liked = Column(Boolean, nullable=False, server_default="false")
-    text_modified = Column(Boolean, nullable=False, server_default="false")
+    author_liked = Column(
+        Boolean, nullable=False, server_default='false', insert_default=False
+    )
+    text_modified = Column(
+        Boolean, nullable=False, server_default='false', insert_default=False
+    )
 
     # FK
     word_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("vocabulary_word.id", ondelete="CASCADE"),
+        ForeignKey('vocabulary_word.id', ondelete='CASCADE'),
         nullable=False,
     )
     author_id = Column(
         PG_UUID(as_uuid=True),
-        ForeignKey("users_user.id", ondelete="CASCADE"),
+        ForeignKey('users_user.id', ondelete='CASCADE'),
         nullable=False,
     )
 
     # Relationships (FK)
-    word = relationship("Word", backref="comments", lazy="selectin")
-    author = relationship("User", backref="word_comments", lazy="selectin")
+    word = relationship('Word', backref='comments', lazy='selectin')
+    author = relationship('User', backref='word_comments', lazy='selectin')
 
     # M2M relationships (likes/dislikes/answers)
     likes = relationship(
-        "User",
+        'User',
         secondary=vocabulary_wordcomment_likes,
-        backref="word_comments_liked",
-        lazy="selectin",
+        backref='word_comments_liked',
+        lazy='selectin',
     )
     dislikes = relationship(
-        "User",
+        'User',
         secondary=vocabulary_wordcomment_dislikes,
-        backref="word_comments_disliked",
-        lazy="selectin",
+        backref='word_comments_disliked',
+        lazy='selectin',
     )
     answers = relationship(
-        "WordComment",
+        'WordComment',
         secondary=vocabulary_wordcomment_answers,
-        primaryjoin="WordComment.id==vocabulary_wordcomment_answers.c.wordcomment_id",
-        secondaryjoin="WordComment.id==vocabulary_wordcomment_answers.c.answer_id",
-        backref="answer_for",
-        lazy="selectin",
+        primaryjoin='WordComment.id==vocabulary_wordcomment_answers.c.wordcomment_id',
+        secondaryjoin='WordComment.id==vocabulary_wordcomment_answers.c.answer_id',
+        backref='answer_for',
+        lazy='selectin',
     )
 
-    __table_args__ = (Index("ix_vocabulary_wordcomment_created", "created"),)
+    __table_args__ = (Index('ix_vocabulary_wordcomment_created', 'created'),)
 
     def __repr__(self):
-        return f"<WordComment(id={self.id}, word_id={self.word_id})>"
+        return f'<WordComment(id={self.id}, word_id={self.word_id})>'

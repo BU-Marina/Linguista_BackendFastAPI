@@ -10,6 +10,20 @@ from pydantic import BaseModel, Field, field_validator
 from core.utils.urls import get_full_media_url
 
 
+class HintOut(BaseModel):
+    """Public schema for exercise hints (DRF-compatible)."""
+
+    id: UUID
+    name: str
+    description: str
+    code: str
+    variants_mode: bool
+    free_input_mode: bool
+    word_customization_content_needed: Optional[str] = None
+
+    model_config = {'from_attributes': True}
+
+
 class ExerciseShortOut(BaseModel):
     id: UUID
     slug: str
@@ -19,6 +33,8 @@ class ExerciseShortOut(BaseModel):
     icon: Optional[str] = None
     available: bool = False
     favorite: bool = False
+    # For list responses frontend expects full HintDto objects here
+    hints_available: List[HintOut] = Field(default_factory=list)
     created: Optional[datetime] = None
     modified: Optional[datetime] = None
 
@@ -36,15 +52,23 @@ class ExerciseListOut(BaseModel):
 
 
 class ExerciseDetailOut(ExerciseShortOut):
-    hints_available: List[UUID] = Field(default_factory=list)
+    """Full exercise details; currently same hints shape as list (HintOut)."""
 
 
 class ExerciseConfigurationIn(BaseModel):
-    exercise_slug: str
+    # Exercise slug is taken from the path in FastAPI; this field is kept
+    # only for parity with DRF, but is not required here.
+    exercise_slug: str | None = None
+    # Config fields that frontend sends (match ExerciseConfigurationOut)
+    input_mode: Optional[str] = None
+    answer_time_limit: Optional[int] = None
+    time_limit_mode: Optional[str] = None
+    repetitions_amount: Optional[int] = None
+    translations_mode: Optional[str] = None
+    definitions_mode: Optional[str] = None
     words: List[UUID] = Field(default_factory=list)
     words_set: List[UUID] = Field(default_factory=list)
     hints_available: List[UUID] = Field(default_factory=list)
-    answer_time_limit: Optional[int] = None
     hints_use_amount: Optional[int] = None
     is_default: bool = False
 

@@ -28,7 +28,7 @@ class SlugMixin:
     __slug_source__: Optional[List[str]] = None
     __slug_max_length__: int = DEFAULT_MAX_SLUG_LENGTH
     __slug_always_update__: bool = True
-    __slug_separator__: str = "-"
+    __slug_separator__: str = '-'
 
 
 def _get_source_value(instance, source_fields: List[str]) -> str:
@@ -50,20 +50,20 @@ def _get_source_value(instance, source_fields: List[str]) -> str:
             except Exception:
                 continue
 
-    return " ".join(p for p in parts if p)
+    return ' '.join(p for p in parts if p)
 
 
 def _fetch_existing_slugs(connection, table, pattern: str, this_id=None):
     """Вернуть множество существующих slug (case-insensitive), начинающихся с pattern."""
     # use bindparam for safety
     stmt = select(table.c.slug).where(
-        func.lower(table.c.slug).like(func.lower(sa.bindparam("pattern")))
+        func.lower(table.c.slug).like(func.lower(sa.bindparam('pattern')))
     )
-    params = {"pattern": pattern + "%"}
+    params = {'pattern': pattern + '%'}
 
-    if this_id is not None and "id" in table.c:
-        stmt = stmt.where(table.c.id != sa.bindparam("this_id"))
-        params["this_id"] = this_id
+    if this_id is not None and 'id' in table.c:
+        stmt = stmt.where(table.c.id != sa.bindparam('this_id'))
+        params['this_id'] = this_id
 
     res = connection.execute(stmt, params)
     rows = res.fetchall()
@@ -72,11 +72,11 @@ def _fetch_existing_slugs(connection, table, pattern: str, this_id=None):
 
 
 def _make_unique_slug(
-    connection, table, base: str, max_len: int, this_id=None, sep="-"
+    connection, table, base: str, max_len: int, this_id=None, sep='-'
 ) -> str:
     """..."""
     if not base:
-        base = f"{table.name}-"  # fallback
+        base = f'{table.name}-'  # fallback
 
     base = base[:max_len].rstrip(sep)
     existing = _fetch_existing_slugs(connection, table, base, this_id=this_id)
@@ -86,7 +86,7 @@ def _make_unique_slug(
 
     i = 1
     while True:
-        suffix = f"{sep}{i}"
+        suffix = f'{sep}{i}'
         space = max_len - len(suffix)
 
         if space <= 0:
@@ -100,25 +100,25 @@ def _make_unique_slug(
         i += 1
 
 
-@event.listens_for(Mapper, "mapper_configured")
+@event.listens_for(Mapper, 'mapper_configured')
 def _mapper_configured(mapper, class_):
     """..."""
     # Если нет __slug_source__, пропускаем
-    if not getattr(class_, "__slug_source__", None):
+    if not getattr(class_, '__slug_source__', None):
         return
 
-    table = getattr(class_, "__table__", None)
+    table = getattr(class_, '__table__', None)
     if table is None:
         return
 
-    max_len = getattr(class_, "__slug_max_length__", 64)
-    sep = getattr(class_, "__slug_separator__", "-")
-    always_update = getattr(class_, "__slug_always_update__", False)
+    max_len = getattr(class_, '__slug_max_length__', 64)
+    sep = getattr(class_, '__slug_separator__', '-')
+    always_update = getattr(class_, '__slug_always_update__', False)
 
-    @event.listens_for(class_, "before_insert")
+    @event.listens_for(class_, 'before_insert')
     def _before_insert(mapper, connection, target):
         """..."""
-        if getattr(target, "slug", None):
+        if getattr(target, 'slug', None):
             return
 
         base_raw = _get_source_value(target, class_.__slug_source__)
@@ -132,16 +132,16 @@ def _mapper_configured(mapper, class_):
             table,
             base,
             max_len,
-            this_id=getattr(target, "id", None),
+            this_id=getattr(target, 'id', None),
             sep=sep,
         )
         target.slug = unique
 
-    @event.listens_for(class_, "before_update")
+    @event.listens_for(class_, 'before_update')
     def _before_update(mapper, connection, target):
         """..."""
         # если уже есть slug и мы не хотим перезаписывать — пропускаем
-        current_slug = getattr(target, "slug", None)
+        current_slug = getattr(target, 'slug', None)
         if current_slug and not always_update:
             return
 
@@ -156,7 +156,7 @@ def _mapper_configured(mapper, class_):
             table,
             base,
             max_len,
-            this_id=getattr(target, "id", None),
+            this_id=getattr(target, 'id', None),
             sep=sep,
         )
         target.slug = unique
@@ -175,18 +175,21 @@ class PublicAccessMixin:
         String(AccessLevelsEnum.max_length),
         nullable=False,
         server_default=AccessLevelsEnum.default_level,
+        insert_default=AccessLevelsEnum.default_level,
     )
 
     add_access_level = Column(
         String(AccessLevelsEnum.max_length),
         nullable=False,
         server_default=AccessLevelsEnum.default_level,
+        insert_default=AccessLevelsEnum.default_level,
     )
 
     allow_access_change = Column(
         Boolean,
         nullable=False,
-        server_default="true",
+        server_default='true',
+        insert_default=True,
     )
 
     # share_with relationship задаём в конкретных моделях (Word/Collection),
