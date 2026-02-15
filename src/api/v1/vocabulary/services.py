@@ -35,6 +35,8 @@ from .schemas import (
     MultipleWordsIn,
     MultipleWordsCreateOut,
     RelationWordIn,
+    SynonymWordIn,
+    WordSynonymOut,
     RelatedWordsOut,
     TagOut,
     TypeOut,
@@ -44,7 +46,7 @@ from .schemas import (
     WordAccessLevelUpdateIn,
     WordListWithAuthorOut,
 )
-from .mapping import map_word, map_word_read
+from .mapping import map_word, map_word_read, map_word_self_related
 from api.v1.collections.mapping import map_collection
 from .params import WordsListParams
 from .filters import WordFilterParams, apply_word_filters
@@ -381,6 +383,53 @@ async def _get_or_create_related_word_ids(
     return ids
 
 
+async def _get_or_create_synonym_word_ids(
+    session: AsyncSession,
+    *,
+    items: list[SynonymWordIn],
+    user_id: UUID,
+    models: dict,
+    default_language: str | None = None,
+) -> list[tuple[UUID, str | None]]:
+    """
+    Get or create word IDs for synonyms, returning tuples of (word_id, note).
+    Handles SynonymWordIn structure with nested from_word.
+    The note is for the synonym relation, not the word itself.
+    """
+    Word = models['Word']
+    result: list[tuple[UUID, str | None]] = []
+
+    for synonym_item in items:
+        # Extract synonym note (for the relation, not the word)
+        synonym_note = synonym_item.note
+        # Get the word data from from_word
+        rel = synonym_item.from_word
+
+        if rel.is_reference():
+            stmt = select(Word.id).where(Word.author_id == user_id)
+            if rel.id:
+                stmt = stmt.where(Word.id == rel.id)
+            if rel.slug:
+                stmt = stmt.where(Word.slug == rel.slug)
+            found = (await session.execute(stmt)).scalar_one_or_none()
+            if not found:
+                raise HTTPException(status_code=404, detail='Related word not found')
+            result.append((found, synonym_note))
+            continue
+
+        # new embedded word
+        rel.ensure_creatable(default_language)
+        new_word = await _create_word_with_nested(
+            session,
+            user_id=user_id,
+            payload=rel,
+            models=models,
+            default_language=rel.language or default_language,
+        )
+        result.append((new_word.id, synonym_note))
+    return result
+
+
 async def _get_word_by_id(session: AsyncSession, user_id: UUID, word_id: UUID, models):
     Word = models['Word']
     return (
@@ -445,12 +494,132 @@ async def _get_related_words(
     return rows
 
 
+async def _get_synonyms_with_relations(
+    session: AsyncSession,
+    user_id: UUID,
+    word_id: UUID,
+    models: dict,
+) -> list[tuple]:
+    """
+    Get synonyms with their relation data (including note).
+    Returns list of tuples: (synonym_word, synonym_relation)
+    """
+    Synonym = models['Synonym']
+    Word = models['Word']
+    WordTranslation = models['WordTranslation']
+    WordTranslations = models['WordTranslations']
+    Definition = models['Definition']
+    WordDefinitions = models['WordDefinitions']
+    UsageExample = models['UsageExample']
+    WordUsageExamples = models['WordUsageExamples']
+    ImageAssociation = models['ImageAssociation']
+    WordImageAssociations = models['WordImageAssociations']
+
+    rows = (
+        await session.execute(
+            select(Synonym, Word)
+            .join(Word, Synonym.to_word_id == Word.id)
+            .where(Synonym.from_word_id == word_id, Word.author_id == user_id)
+            .options(
+                selectinload(Word.tags),
+                selectinload(Word.types),
+                selectinload(Word.language),
+                selectinload(Word.wordimageassociations).selectinload(
+                    WordImageAssociations.image
+                ),
+                selectinload(Word.author),
+            )
+        )
+    ).all()
+
+    # Load translations, definitions, examples, and images for each synonym word
+    result = []
+    for synonym, word in rows:
+        # Load translations
+        translations = (
+            (
+                await session.execute(
+                    select(WordTranslation)
+                    .join(
+                        WordTranslations,
+                        WordTranslations.translation_id == WordTranslation.id,
+                    )
+                    .where(WordTranslations.word_id == word.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # Load definitions
+        definitions = (
+            (
+                await session.execute(
+                    select(Definition)
+                    .join(
+                        WordDefinitions, WordDefinitions.definition_id == Definition.id
+                    )
+                    .where(WordDefinitions.word_id == word.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # Load examples
+        examples = (
+            (
+                await session.execute(
+                    select(UsageExample)
+                    .join(
+                        WordUsageExamples,
+                        WordUsageExamples.example_id == UsageExample.id,
+                    )
+                    .where(WordUsageExamples.word_id == word.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # Load images
+        images = (
+            (
+                await session.execute(
+                    select(ImageAssociation)
+                    .join(
+                        WordImageAssociations,
+                        WordImageAssociations.image_id == ImageAssociation.id,
+                    )
+                    .where(WordImageAssociations.word_id == word.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # Set attributes on word object for mapping function
+        word.translations = translations
+        word.definitions = definitions
+        word.examples = examples
+        word.image_associations = images
+
+        result.append((word, synonym))
+
+    return result
+
+
 async def _add_bidirectional_relations(
     session: AsyncSession,
     src_word_id,
     target_word_ids: list[UUID],
     relation_model,
+    notes: dict[UUID, str | None] | None = None,
 ):
+    """
+    Add bidirectional relations between words.
+    notes: Optional dict mapping target_word_id to note for the relation.
+    """
     rel = relation_model
     existing = set(
         (
@@ -462,9 +631,11 @@ async def _add_bidirectional_relations(
         ).all()
     )
     for tid in target_word_ids:
+        note = notes.get(tid) if notes else None
         if (src_word_id, tid) not in existing:
-            session.add(rel(from_word_id=src_word_id, to_word_id=tid))
+            session.add(rel(from_word_id=src_word_id, to_word_id=tid, note=note))
         if (tid, src_word_id) not in existing:
+            # For reverse relation, don't set note (note is specific to the direction)
             session.add(rel(from_word_id=tid, to_word_id=src_word_id))
 
 
@@ -623,14 +794,18 @@ async def word_create_service(
 
     # synonyms / antonyms / similars (bidirectional add)
     if payload.synonyms:
-        target_ids = await _get_or_create_related_word_ids(
+        synonym_results = await _get_or_create_synonym_word_ids(
             session,
             items=payload.synonyms,
             user_id=user_id,
             models=models,
             default_language=payload.language,
         )
-        await _add_bidirectional_relations(session, word.id, target_ids, Synonym)
+        target_ids = [word_id for word_id, _ in synonym_results]
+        notes = {word_id: note for word_id, note in synonym_results if note is not None}
+        await _add_bidirectional_relations(
+            session, word.id, target_ids, Synonym, notes=notes if notes else None
+        )
     if payload.antonyms:
         target_ids = await _get_or_create_related_word_ids(
             session,
@@ -1436,12 +1611,14 @@ async def word_retrieve_service(
         comments = [_map_word_comment(c, user_id) for c in comments_rows]
 
     # Load synonyms, antonyms, similars
-    Synonym = models['Synonym']
-    Antonym = models['Antonym']
-    Similar = models['Similar']
-    synonyms = await _get_related_words(session, user_id, word.id, Synonym, models)
-    antonyms = await _get_related_words(session, user_id, word.id, Antonym, models)
-    similars = await _get_related_words(session, user_id, word.id, Similar, models)
+    # Synonym = models['Synonym']
+    # Antonym = models['Antonym']
+    # Similar = models['Similar']
+    synonyms_with_relations = await _get_synonyms_with_relations(
+        session, user_id, word.id, models
+    )
+    # antonyms = await _get_related_words(session, user_id, word.id, Antonym, models)
+    # similars = await _get_related_words(session, user_id, word.id, Similar, models)
 
     # Load collections (same as published word profile)
     Collection = models['Collection']
@@ -1552,18 +1729,23 @@ async def word_retrieve_service(
     word_result.comments_count = comments_count
     word_result.comments = comments
     # Populate synonyms, antonyms, similars, and collections
-    word_result.synonyms_count = len(synonyms)
+    word_result.synonyms_count = len(synonyms_with_relations)
     word_result.synonyms = [
-        {'id': str(s.id), 'slug': s.slug, 'text': s.text} for s in synonyms
+        WordSynonymOut(
+            id=synonym_rel.id,
+            note=synonym_rel.note,
+            from_word=map_word_self_related(synonym_word, lang=lang),
+        )
+        for synonym_word, synonym_rel in synonyms_with_relations
     ]
-    word_result.antonyms_count = len(antonyms)
-    word_result.antonyms = [
-        {'id': str(a.id), 'slug': a.slug, 'text': a.text} for a in antonyms
-    ]
-    word_result.similars_count = len(similars)
-    word_result.similars = [
-        {'id': str(s.id), 'slug': s.slug, 'text': s.text} for s in similars
-    ]
+    # word_result.antonyms_count = len(antonyms)
+    # word_result.antonyms = [
+    #     {'id': str(a.id), 'slug': a.slug, 'text': a.text} for a in antonyms
+    # ]
+    # word_result.similars_count = len(similars)
+    # word_result.similars = [
+    #     {'id': str(s.id), 'slug': s.slug, 'text': s.text} for s in similars
+    # ]
     word_result.collections_count = len(collections)
     word_result.collections = collections
     return word_result
@@ -2631,12 +2813,14 @@ async def word_update_service(
         comments = [_map_word_comment(c, user_id) for c in comments_rows]
 
     # Load synonyms, antonyms, similars
-    Synonym = models['Synonym']
-    Antonym = models['Antonym']
-    Similar = models['Similar']
-    synonyms = await _get_related_words(session, user_id, word.id, Synonym, models)
-    antonyms = await _get_related_words(session, user_id, word.id, Antonym, models)
-    similars = await _get_related_words(session, user_id, word.id, Similar, models)
+    # Synonym = models['Synonym']
+    # Antonym = models['Antonym']
+    # Similar = models['Similar']
+    synonyms_with_relations = await _get_synonyms_with_relations(
+        session, user_id, word.id, models
+    )
+    # antonyms = await _get_related_words(session, user_id, word.id, Antonym, models)
+    # similars = await _get_related_words(session, user_id, word.id, Similar, models)
 
     # Load collections (same as published word profile)
     Collection = models['Collection']
@@ -2747,18 +2931,23 @@ async def word_update_service(
     word_result.comments_count = comments_count
     word_result.comments = comments
     # Populate synonyms, antonyms, similars, and collections
-    word_result.synonyms_count = len(synonyms)
+    word_result.synonyms_count = len(synonyms_with_relations)
     word_result.synonyms = [
-        {'id': str(s.id), 'slug': s.slug, 'text': s.text} for s in synonyms
+        WordSynonymOut(
+            id=synonym_rel.id,
+            note=synonym_rel.note,
+            from_word=map_word_self_related(synonym_word, lang=lang),
+        )
+        for synonym_word, synonym_rel in synonyms_with_relations
     ]
-    word_result.antonyms_count = len(antonyms)
-    word_result.antonyms = [
-        {'id': str(a.id), 'slug': a.slug, 'text': a.text} for a in antonyms
-    ]
-    word_result.similars_count = len(similars)
-    word_result.similars = [
-        {'id': str(s.id), 'slug': s.slug, 'text': s.text} for s in similars
-    ]
+    # word_result.antonyms_count = len(antonyms)
+    # word_result.antonyms = [
+    #     {'id': str(a.id), 'slug': a.slug, 'text': a.text} for a in antonyms
+    # ]
+    # word_result.similars_count = len(similars)
+    # word_result.similars = [
+    #     {'id': str(s.id), 'slug': s.slug, 'text': s.text} for s in similars
+    # ]
     word_result.collections_count = len(collections)
     word_result.collections = collections
     return word_result

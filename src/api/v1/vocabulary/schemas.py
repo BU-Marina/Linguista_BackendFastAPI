@@ -137,7 +137,7 @@ class WordIn(BaseModel):
     examples: List[ExampleIn] = Field(default_factory=list)
     # Frontend sends "image_associations"; map it into images via alias
     images: List[ImageIn] = Field(default_factory=list, alias='image_associations')
-    synonyms: List['RelationWordIn'] = Field(default_factory=list)
+    synonyms: List['SynonymWordIn'] = Field(default_factory=list)
     antonyms: List['RelationWordIn'] = Field(default_factory=list)
     similars: List['RelationWordIn'] = Field(default_factory=list)
 
@@ -160,7 +160,7 @@ class WordInPartial(BaseModel):
     examples: Optional[List[ExampleIn]] = None
     # Frontend sends "image_associations"; map it into images via alias
     images: Optional[List[ImageIn]] = Field(default=None, alias='image_associations')
-    synonyms: Optional[List['RelationWordIn']] = None
+    synonyms: Optional[List['SynonymWordIn']] = None
     antonyms: Optional[List['RelationWordIn']] = None
     similars: Optional[List['RelationWordIn']] = None
 
@@ -172,6 +172,37 @@ class SourceWordOut(BaseModel):
     slug: str
     text: str
     author: Optional[AuthorShortOut] = None
+
+
+class WordSelfRelatedOut(BaseModel):
+    """Word data for synonyms/antonyms/similars in word profile."""
+
+    id: UUID
+    language: str
+    text: str
+    slug: str
+    author: Optional[AuthorShortOut] = None
+    types: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+    translations: List[TranslationOut] = Field(default_factory=list)
+    image_associations: List[ImageOut] = Field(default_factory=list)
+    definitions: List[DefinitionOut] = Field(default_factory=list)
+    examples: List[ExampleOut] = Field(default_factory=list)
+    note: Optional[str] = None
+    translations_count: int = 0
+    images_count: int = 0
+    definitions_count: int = 0
+    examples_count: int = 0
+    created: Optional[datetime] = None
+    modified: Optional[datetime] = None
+
+
+class WordSynonymOut(BaseModel):
+    """Synonym output for word profile matching frontend structure."""
+
+    id: UUID
+    note: Optional[str] = None
+    from_word: WordSelfRelatedOut
 
 
 class WordReadOut(WordListOut):
@@ -188,7 +219,7 @@ class WordReadOut(WordListOut):
     definitions_count: int = 0
     examples_count: int = 0
     synonyms_count: int = 0
-    synonyms: List[dict] = Field(default_factory=list)
+    synonyms: List[WordSynonymOut] = Field(default_factory=list)
     collections_count: int = 0
     collections: List[dict] = Field(default_factory=list)
     comments_count: int = 0
@@ -228,6 +259,19 @@ class RelationWordIn(BaseModel):
             raise ValueError('text is required for new related word')
         if not (self.language or default_language):
             raise ValueError('language is required for new related word')
+
+
+class SynonymWordIn(BaseModel):
+    """
+    Synonym payload with nested from_word structure (matches frontend format).
+    The note field is for the synonym relation, not the word itself.
+    """
+
+    from_word: RelationWordIn
+    note: Optional[str] = None
+    copy_translations: Optional[bool] = None
+    copy_associations: Optional[bool] = None
+    copy_definitions: Optional[bool] = None
 
 
 class PageOut(BaseModel):

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from .schemas import WordListOut, WordReadOut, SourceWordOut
+from .schemas import WordListOut, WordReadOut, SourceWordOut, WordSelfRelatedOut
 from core.utils.i18n import i18n_get
 from config.settings import settings
 from api.v1.translations.schemas import TranslationOut
@@ -205,4 +205,123 @@ def map_word_read(word, lang: str | None = None) -> WordReadOut:
         add_access_level=getattr(word, 'add_access_level', None),
         allow_access_change=getattr(word, 'allow_access_change', True),
         allow_comments=getattr(word, 'allow_comments', True),
+    )
+
+
+def map_word_self_related(word, lang: str | None = None) -> WordSelfRelatedOut:
+    """Map a word to WordSelfRelatedOut for synonyms/antonyms/similars."""
+    lang = lang or settings.DEFAULT_LANG
+
+    # Map translations
+    translations = []
+    for t in getattr(word, 'translations', []) or []:
+        translations.append(
+            TranslationOut(
+                id=t.id,
+                slug=t.slug,
+                text=t.text,
+                language=getattr(t.language, 'isocode', None)
+                if hasattr(t, 'language')
+                else None,
+                words_count=getattr(t, 'words_count', 0),
+                other_words_count=getattr(t, 'other_words_count', 0),
+                last_6_words=getattr(t, 'last_6_words', []),
+                created=t.created,
+                modified=t.modified,
+            )
+        )
+
+    # Map examples
+    examples = [
+        ExampleOut(
+            id=ex.id,
+            slug=ex.slug,
+            text=ex.text,
+            translation=getattr(ex, 'translation', None),
+            language=getattr(ex.language, 'isocode', None)
+            if hasattr(ex, 'language') and ex.language
+            else None,
+            source=getattr(ex, 'source', None) or 'OTH',
+            source_name=getattr(ex, 'source_name', None),
+            source_url=getattr(ex, 'source_url', None),
+            words_count=getattr(ex, 'words_count', 0),
+            other_words_count=getattr(ex, 'other_words_count', 0),
+            last_4_words=getattr(ex, 'last_4_words', []),
+            created=ex.created,
+            modified=ex.modified,
+        )
+        for ex in getattr(word, 'examples', []) or []
+    ]
+
+    # Map definitions
+    definitions = [
+        DefinitionOut(
+            id=d.id,
+            slug=d.slug,
+            text=d.text,
+            translation=d.translation,
+            language=getattr(d.language, 'isocode', None)
+            if hasattr(d, 'language') and d.language
+            else None,
+            words_count=getattr(d, 'words_count', 0),
+            other_words_count=getattr(d, 'other_words_count', 0),
+            last_4_words=getattr(d, 'last_4_words', []),
+            created=d.created,
+            modified=d.modified,
+        )
+        for d in getattr(word, 'definitions', []) or []
+    ]
+
+    # Map images
+    images = [
+        ImageOut.model_validate(img)
+        for img in getattr(word, 'image_associations', []) or []
+    ]
+
+    # Map tags and types
+    tags = [t.name for t in getattr(word, 'tags', []) or []]
+    types = []
+    for t in getattr(word, 'types', []) or []:
+        name = (
+            i18n_get(t, 'name', lang)
+            or getattr(t, 'name_en', None)
+            or getattr(t, 'name_ru', None)
+            or ''
+        )
+        types.append(name)
+
+    # Map author
+    author_obj = getattr(word, 'author', None)
+    author_payload = None
+    if author_obj is not None:
+        author_payload = {
+            'id': str(getattr(author_obj, 'id', None)),
+            'slug': getattr(author_obj, 'slug', None),
+            'username': getattr(author_obj, 'username', None),
+            'first_name': getattr(author_obj, 'first_name', None),
+            'profile_image_url': getattr(author_obj, 'profile_image_url', None),
+            'profile_header_image_url': getattr(
+                author_obj, 'profile_header_image_url', None
+            ),
+        }
+
+    return WordSelfRelatedOut(
+        id=word.id,
+        language=getattr(word.language, 'isocode', None) or '',
+        text=word.text,
+        slug=word.slug,
+        author=author_payload,
+        types=types,
+        tags=tags,
+        translations=translations,
+        image_associations=images,
+        definitions=definitions,
+        examples=examples,
+        note=getattr(word, 'note', None),
+        translations_count=len(translations),
+        images_count=len(images),
+        definitions_count=len(definitions),
+        examples_count=len(examples),
+        created=word.created,
+        modified=word.modified,
     )
