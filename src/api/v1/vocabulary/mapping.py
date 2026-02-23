@@ -87,19 +87,40 @@ def map_word_read(word, lang: str | None = None) -> WordReadOut:
     base_dict = base.model_dump()
 
     # Map translations with proper language conversion (replace the short version from base)
+    from api.v1.translations.schemas import TranslationWordOut
+
     translations = []
     for t in getattr(word, 'translations', []) or []:
+        last_6_words_raw = getattr(t, 'last_6_words', [])
+        # Convert to TranslationWordOut objects (handles both dict and string formats)
+        last_6_words = []
+        for word_item in last_6_words_raw:
+            if isinstance(word_item, dict):
+                last_6_words.append(
+                    TranslationWordOut(
+                        text=word_item.get('text', ''),
+                        language__isocode=word_item.get('language__isocode', ''),
+                    )
+                )
+            elif isinstance(word_item, TranslationWordOut):
+                last_6_words.append(word_item)
+            else:
+                # String format (legacy) - convert to object with empty language
+                last_6_words.append(
+                    TranslationWordOut(text=str(word_item), language__isocode='')
+                )
+
         translations.append(
             TranslationOut(
                 id=t.id,
                 slug=t.slug,
                 text=t.text,
-                language=getattr(t.language, 'isocode', None)
+                language=getattr(t.language, 'isocode', None) or ''
                 if hasattr(t, 'language')
-                else None,
+                else '',
                 words_count=getattr(t, 'words_count', 0),
                 other_words_count=getattr(t, 'other_words_count', 0),
-                last_6_words=getattr(t, 'last_6_words', []),
+                last_6_words=last_6_words,
                 created=t.created,
                 modified=t.modified,
             )
@@ -220,9 +241,9 @@ def map_word_self_related(word, lang: str | None = None) -> WordSelfRelatedOut:
                 id=t.id,
                 slug=t.slug,
                 text=t.text,
-                language=getattr(t.language, 'isocode', None)
+                language=getattr(t.language, 'isocode', None) or ''
                 if hasattr(t, 'language')
-                else None,
+                else '',
                 words_count=getattr(t, 'words_count', 0),
                 other_words_count=getattr(t, 'other_words_count', 0),
                 last_6_words=getattr(t, 'last_6_words', []),

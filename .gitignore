@@ -157,3 +157,7 @@ backup/
 
 # logs folder
 logs/
+
+# debug files
+debug_
+debug_html/

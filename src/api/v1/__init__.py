@@ -14,3 +14,4 @@ from .exercises.ws import ws_router as ws_exercises_router  # noqa: F401
 from .notifications import router as notifications_router  # noqa: F401
 from .notifications import ws_router as ws_notifications_router  # noqa: F401
 from .unsplash import router as unsplash_router  # noqa: F401
+from .pinterest import router as pinterest_router  # noqa: F401

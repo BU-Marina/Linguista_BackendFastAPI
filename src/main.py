@@ -1,5 +1,7 @@
 """App. Объект приложения."""
 
+import asyncio
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -12,6 +14,16 @@ from api.routers import main_router
 from api.v1.notifications.ws import router as ws_notifications_router
 from api.v1.exercises.ws import router as ws_exercises_router
 from config.settings import MEDIA_ROOT, MEDIA_URL, settings
+
+# Set Windows event loop policy to support Playwright subprocess execution
+# This must be done before creating any event loops
+if sys.platform == 'win32':
+    if sys.version_info >= (3, 8):
+        # Use ProactorEventLoop on Windows for subprocess support (required by Playwright)
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    else:
+        # For Python < 3.8, use the default policy
+        pass
 
 app = FastAPI()
 

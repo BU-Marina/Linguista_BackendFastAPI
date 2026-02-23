@@ -1527,9 +1527,9 @@ async def published_translation_detail_service(
         id=translation.id,
         slug=translation.slug,
         text=translation.text,
-        language=getattr(translation.language, 'isocode', None)
+        language=getattr(translation.language, 'isocode', None) or ''
         if hasattr(translation, 'language')
-        else None,
+        else '',
         created=translation.created,
         modified=translation.modified,
     )
@@ -3561,9 +3561,9 @@ async def published_translations_list_service(
                 id=r.id,
                 slug=r.slug,
                 text=r.text,
-                language=getattr(r.language, 'isocode', None)
+                language=getattr(r.language, 'isocode', None) or ''
                 if hasattr(r, 'language')
-                else None,
+                else '',
                 other_words_count=other_words_count,
                 last_6_words=last_words,
                 created=r.created,

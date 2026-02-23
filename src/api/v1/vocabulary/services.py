@@ -219,8 +219,8 @@ async def _create_word_with_nested(
         else:
             # Create new translation
             t = WordTranslation(text=tr.text, language_id=lang_id, author_id=user_id)
-            session.add(t)
-            await session.flush()
+        session.add(t)
+        await session.flush()
 
         # Check if join already exists
         existing_join = (
@@ -263,8 +263,8 @@ async def _create_word_with_nested(
                 language_id=lang_id,
                 author_id=user_id,
             )
-            session.add(definition)
-            await session.flush()
+        session.add(definition)
+        await session.flush()
 
         # Check if join already exists
         existing_join = (
@@ -310,8 +310,8 @@ async def _create_word_with_nested(
                 source_name=ex.source_name,
                 source_url=ex.source_url,
             )
-            session.add(example)
-            await session.flush()
+        session.add(example)
+        await session.flush()
 
         # Check if join already exists
         existing_join = (
@@ -330,9 +330,12 @@ async def _create_word_with_nested(
     for img in getattr(payload, 'images', []) or []:
         image = ImageAssociation(
             image_url=img.image_url,
+            source=getattr(img, 'source', None),
+            source_url=getattr(img, 'source_url', None),
             width=img.width,
             height=img.height,
             num=img.num,
+            dominant_color=getattr(img, 'dominant_color', None),
             author_id=user_id,
         )
         session.add(image)
@@ -1271,12 +1274,16 @@ async def multiple_words_create_service(
                         ).scalar_one_or_none()
                         if existing_img:
                             existing_img.image_url = img.image_url
+                            existing_img.source = getattr(img, 'source', None)
+                            existing_img.source_url = getattr(img, 'source_url', None)
                             existing_img.width = img.width
                             existing_img.height = img.height
                             existing_img.num = img.num
                     else:
                         image = ImageAssociation(
                             image_url=img.image_url,
+                            source=getattr(img, 'source', None),
+                            source_url=getattr(img, 'source_url', None),
                             width=img.width,
                             height=img.height,
                             num=img.num,
@@ -1451,6 +1458,7 @@ async def word_retrieve_service(
     WordUsageExamples = models['WordUsageExamples']
     ImageAssociation = models['ImageAssociation']
     WordImageAssociations = models['WordImageAssociations']
+    Language = models['Language']
 
     stmt = (
         select(Word)
@@ -1542,9 +1550,11 @@ async def word_retrieve_service(
                 select(
                     WordTranslations.translation_id,
                     Word.text,
+                    Language.isocode,
                     WordTranslations.created,
                 )
                 .join(Word, Word.id == WordTranslations.word_id)
+                .join(Language, Word.language_id == Language.id)
                 .where(
                     WordTranslations.translation_id.in_(translation_ids),
                     Word.author_id == user_id,
@@ -1552,11 +1562,14 @@ async def word_retrieve_service(
                 .order_by(WordTranslations.created.desc())
             )
         ).all()
-        last_words_map: dict[UUID, list[str]] = {t_id: [] for t_id in translation_ids}
-        for t_id, word_text, _created in assoc_rows:
+        last_words_map: dict[UUID, list[dict]] = {t_id: [] for t_id in translation_ids}
+        for t_id, word_text, lang_isocode, _created in assoc_rows:
             if len(last_words_map[t_id]) >= 6:
                 continue
-            last_words_map[t_id].append(word_text)
+            # Store as objects with text and language__isocode (will be converted to strings in mapping for word profiles)
+            last_words_map[t_id].append(
+                {'text': word_text, 'language__isocode': lang_isocode or ''}
+            )
 
         for t in translations:
             words_count = counts_map.get(t.id, 0)
@@ -2017,13 +2030,13 @@ async def words_set_access_level_service(
                         detail=f'Invalid read_access_level: {item.read_access_level}',
                     )
                 word.read_access_level = item.read_access_level
-            if item.add_access_level:
-                if item.add_access_level not in valid_levels:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f'Invalid add_access_level: {item.add_access_level}',
-                    )
-                word.add_access_level = item.add_access_level
+        if item.add_access_level:
+            if item.add_access_level not in valid_levels:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f'Invalid add_access_level: {item.add_access_level}',
+                )
+            word.add_access_level = item.add_access_level
 
         if item.allow_access_change is not None:
             word.allow_access_change = item.allow_access_change
@@ -2646,6 +2659,10 @@ async def word_update_service(
                         # Create new image copy with updated data
                         new_image = ImageAssociation(
                             image_url=img.image_url,
+                            source=getattr(img, 'source', None)
+                            or getattr(existing_img, 'source', None),
+                            source_url=getattr(img, 'source_url', None)
+                            or getattr(existing_img, 'source_url', None),
                             width=img.width
                             if img.width is not None
                             else existing_img.width,
@@ -2653,6 +2670,9 @@ async def word_update_service(
                             if img.height is not None
                             else existing_img.height,
                             num=img.num if img.num is not None else existing_img.num,
+                            # Prefer new dominant_color if provided; otherwise keep existing
+                            dominant_color=getattr(img, 'dominant_color', None)
+                            or existing_img.dominant_color,
                             author_id=user_id,
                         )
                         session.add(new_image)
@@ -2667,9 +2687,12 @@ async def word_update_service(
                 # Create new image
                 image = ImageAssociation(
                     image_url=img.image_url,
+                    source=getattr(img, 'source', None),
+                    source_url=getattr(img, 'source_url', None),
                     width=img.width,
                     height=img.height,
                     num=img.num,
+                    dominant_color=getattr(img, 'dominant_color', None),
                     author_id=user_id,
                 )
                 session.add(image)
@@ -2961,6 +2984,7 @@ async def word_delete_service(
     models: dict = VOCAB_MODELS,
 ) -> None:
     Word = models['Word']
+    Synonym = models['Synonym']
     WordTranslations = models['WordTranslations']
     WordDefinitions = models['WordDefinitions']
     WordUsageExamples = models['WordUsageExamples']
@@ -2974,6 +2998,13 @@ async def word_delete_service(
     ).scalar_one_or_none()
     if not word:
         raise HTTPException(status_code=404, detail='Word not found')
+
+    # Delete all synonym relations where this word participates
+    await session.execute(
+        delete(Synonym).where(
+            or_(Synonym.from_word_id == word.id, Synonym.to_word_id == word.id)
+        )
+    )
 
     # Manually delete all join-table rows to avoid NULLing FKs on flush
     await session.execute(

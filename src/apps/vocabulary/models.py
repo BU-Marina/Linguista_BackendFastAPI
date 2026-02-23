@@ -461,9 +461,15 @@ class ImageAssociation(Base):
 
     # fields
     image_url = Column(String(1024), nullable=True)
+    # Source marker, e.g. "PIN" for Pinterest
+    source = Column(String(8), nullable=True)
+    # Optional source link (e.g. pin page URL)
+    source_url = Column(String(2048), nullable=True)
     width = Column(SmallInteger, nullable=True)
     height = Column(SmallInteger, nullable=True)
     num = Column(SmallInteger, nullable=True)
+    # Average/dominant color in hex, e.g. "#aabbcc" (used for backgrounds)
+    dominant_color = Column(String(7), nullable=True)
 
     # FK
     author_id = Column(

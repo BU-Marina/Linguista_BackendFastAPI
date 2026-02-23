@@ -71,5 +71,12 @@ class Settings(BaseSettings):
     # BACKEND URL (for constructing full URLs in API responses)
     BACKEND_URL: str = 'http://localhost:8000'
 
+    # PINTEREST API
+    PINTEREST_APP_ID: str = ''
+    PINTEREST_APP_SECRET: str = ''
+    PINTEREST_REDIRECT_URI: str = 'http://localhost:3000/auth/pinterest/callback'
+
+    SCRAPINGBEE_API_KEY: str = ''
+
 
 settings = Settings()

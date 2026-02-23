@@ -153,9 +153,12 @@ async def images_list_service(
             ImageOut(
                 id=r.id,
                 image_url=r.image_url,
+                source=getattr(r, 'source', None),
+                source_url=getattr(r, 'source_url', None),
                 width=r.width,
                 height=r.height,
                 num=r.num,
+                dominant_color=getattr(r, 'dominant_color', None),
                 words_count=words_count,
                 other_words_count=other_words_count,
                 last_6_words=last_words,
@@ -198,6 +201,8 @@ async def image_create_service(
 
     obj = Image(
         image_url=payload.image_url,
+        source=payload.source,
+        source_url=payload.source_url,
         width=payload.width,
         height=payload.height,
         num=payload.num,
@@ -254,6 +259,8 @@ async def image_create_service(
     return ImageOut(
         id=obj.id,
         image_url=obj.image_url,
+        source=getattr(obj, 'source', None),
+        source_url=getattr(obj, 'source_url', None),
         width=obj.width,
         height=obj.height,
         num=obj.num,
@@ -299,6 +306,8 @@ async def image_retrieve_service(
     return ImageOut(
         id=obj.id,
         image_url=obj.image_url,
+        source=getattr(obj, 'source', None),
+        source_url=getattr(obj, 'source_url', None),
         width=obj.width,
         height=obj.height,
         num=obj.num,
@@ -361,6 +370,10 @@ async def image_update_service(
         # For optional fields, use payload value if provided, otherwise use original
         new_image = Image(
             image_url=payload.image_url,
+            source=payload.source if payload.source is not None else obj.source,
+            source_url=payload.source_url
+            if payload.source_url is not None
+            else obj.source_url,
             width=payload.width if payload.width is not None else obj.width,
             height=payload.height if payload.height is not None else obj.height,
             num=payload.num if payload.num is not None else obj.num,
@@ -400,6 +413,8 @@ async def image_update_service(
         return ImageOut(
             id=new_image.id,
             image_url=new_image.image_url,
+            source=getattr(new_image, 'source', None),
+            source_url=getattr(new_image, 'source_url', None),
             width=new_image.width,
             height=new_image.height,
             num=new_image.num,
@@ -410,6 +425,10 @@ async def image_update_service(
     else:
         # User is the author - update existing image (apply patch)
         obj.image_url = payload.image_url
+        if payload.source is not None:
+            obj.source = payload.source
+        if payload.source_url is not None:
+            obj.source_url = payload.source_url
         # For optional fields, only update if provided in payload
         if payload.width is not None:
             obj.width = payload.width
@@ -435,6 +454,8 @@ async def image_update_service(
         return ImageOut(
             id=obj.id,
             image_url=obj.image_url,
+            source=getattr(obj, 'source', None),
+            source_url=getattr(obj, 'source_url', None),
             width=obj.width,
             height=obj.height,
             num=obj.num,

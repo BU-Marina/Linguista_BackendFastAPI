@@ -118,7 +118,7 @@ async def translations_list_service(
         .all()
     )
     translation_ids = [row.id for row in rows]
-    last_words_map: dict[UUID, list[str]] = {t_id: [] for t_id in translation_ids}
+    last_words_map: dict[UUID, list[dict]] = {t_id: [] for t_id in translation_ids}
     counts_map: dict[UUID, int] = {t_id: 0 for t_id in translation_ids}
     if translation_ids:
         counts = (
@@ -139,9 +139,11 @@ async def translations_list_service(
                 select(
                     WordTranslations.translation_id,
                     Word.text,
+                    Language.isocode,
                     WordTranslations.created,
                 )
                 .join(Word, Word.id == WordTranslations.word_id)
+                .join(Language, Word.language_id == Language.id)
                 .where(
                     WordTranslations.translation_id.in_(translation_ids),
                     Word.author_id == user_id,
@@ -149,10 +151,12 @@ async def translations_list_service(
                 .order_by(WordTranslations.created.desc())
             )
         ).all()
-        for t_id, word_text, _created in assoc_rows:
+        for t_id, word_text, lang_isocode, _created in assoc_rows:
             if len(last_words_map[t_id]) >= 6:
                 continue
-            last_words_map[t_id].append(word_text)
+            last_words_map[t_id].append(
+                {'text': word_text, 'language__isocode': lang_isocode or ''}
+            )
 
     results = []
     for row in rows:
@@ -164,7 +168,7 @@ async def translations_list_service(
                 id=row.id,
                 slug=row.slug,
                 text=row.text,
-                language=getattr(row.language, 'isocode', None),
+                language=getattr(row.language, 'isocode', None) or '',
                 words_count=words_count,
                 other_words_count=other_words_count,
                 last_6_words=last_words,
@@ -267,7 +271,7 @@ async def translation_create_service(
         id=obj.id,
         slug=obj.slug,
         text=obj.text,
-        language=payload.language,
+        language=payload.language or '',
         words_count=words_count,
         created=obj.created,
         modified=obj.modified,
@@ -312,7 +316,7 @@ async def translation_retrieve_service(
         id=obj.id,
         slug=obj.slug,
         text=obj.text,
-        language=getattr(obj.language, 'isocode', None),
+        language=getattr(obj.language, 'isocode', None) or '',
         words_count=words_count,
         created=obj.created,
         modified=obj.modified,
@@ -423,7 +427,7 @@ async def translation_update_service(
             id=new_translation.id,
             slug=new_translation.slug,
             text=new_translation.text,
-            language=payload.language,
+            language=payload.language or '',
             words_count=words_count,
             created=new_translation.created,
             modified=new_translation.modified,

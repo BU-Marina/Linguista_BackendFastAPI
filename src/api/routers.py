@@ -19,6 +19,7 @@ from .v1 import (
     ws_notifications_router,
     ws_exercises_router,
     unsplash_router,
+    pinterest_router,
 )
 
 main_router = APIRouter(prefix='/api/v1')
@@ -39,3 +40,4 @@ main_router.include_router(notifications_router)
 main_router.include_router(ws_notifications_router)
 main_router.include_router(ws_exercises_router)
 main_router.include_router(unsplash_router)
+main_router.include_router(pinterest_router)

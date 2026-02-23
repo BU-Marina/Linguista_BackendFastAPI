@@ -13,18 +13,26 @@ from core.utils.urls import get_full_media_url
 class ImageIn(BaseModel):
     id: Optional[UUID] = None  # If provided, update instead of create
     image_url: str
+    source: Optional[str] = None
+    source_url: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
     num: Optional[int] = None
+    # Optional average/dominant color (hex), e.g. "#aabbcc"
+    dominant_color: Optional[str] = None
     words: Optional[List[UUID]] = None  # Word IDs to associate with this image
 
 
 class ImageOut(BaseModel):
     id: UUID
     image_url: str
+    source: Optional[str] = None
+    source_url: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
     num: Optional[int] = None
+    # Average/dominant color in hex (if available)
+    dominant_color: Optional[str] = None
     words_count: int = 0
     other_words_count: int = 0
     last_6_words: List[str] = Field(default_factory=list)

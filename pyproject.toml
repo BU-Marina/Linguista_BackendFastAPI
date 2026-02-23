@@ -32,6 +32,8 @@ redis = "^7.1.0"
 httpx = "^0.28.1"
 setuptools = "^80.9.0"
 websockets = "^16.0"
+playwright = "^1.58.0"
+pillow = "^12.1.1"
 
 [tool.poetry.group.dev.dependencies]
 gevent = "^25.9.1"

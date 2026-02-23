@@ -16,16 +16,22 @@ class TranslationIn(BaseModel):
     words: Optional[List[UUID]] = None  # Word IDs to associate with this translation
 
 
+class TranslationWordOut(BaseModel):
+    """Word object in last_6_words for TranslationDto."""
+
+    text: str
+    language__isocode: str
+
+
 class TranslationOut(BaseModel):
     id: UUID
     slug: str
     text: str
-    language: Optional[str] = None
+    language: str = ''  # Frontend expects non-optional string
     words_count: int = 0
     other_words_count: int = 0
-    # Last related words texts (for lists, latest 6 words from user's vocabulary;
-    # for word profile, typically includes at least the current word)
-    last_6_words: List[str] = Field(default_factory=list)
+    # Last related words as objects with text and language__isocode (for translation lists/cards)
+    last_6_words: List[TranslationWordOut] = Field(default_factory=list)
     created: Optional[datetime] = None
     modified: Optional[datetime] = None
 
